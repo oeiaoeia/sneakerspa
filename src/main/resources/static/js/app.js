@@ -1495,20 +1495,38 @@ function triggerPhotoUpload(slotNumber, label) {
   if (input) input.click();
 }
 
-async function handlePhotoFileSelected(e) {
+function handlePhotoFileSelected(e) {
   const file = e.target.files[0];
   if (!file) return;
 
+  // Enforce 2 MB limit
+  if (file.size > 2 * 1024 * 1024) {
+    showToast("File size exceeds 2 MB limit! Please choose an image under 2MB.", "error");
+    return;
+  }
+
+  // Enforce image types only
+  if (!file.type || !file.type.startsWith("image/")) {
+    showToast("Only image files (JPEG, PNG, WEBP) are allowed!", "error");
+    return;
+  }
+
   try {
-    showToast("Uploading photo...");
-    const uploaded = await API.uploadPhoto(file, activeUploadSlot, activeUploadLabel);
+    const previewUrl = URL.createObjectURL(file);
     // Remove if slot already occupied
     state.booking.uploadedPhotos = state.booking.uploadedPhotos.filter((p) => p.slotNumber !== activeUploadSlot);
-    state.booking.uploadedPhotos.push(uploaded);
-    showToast(`Uploaded ${activeUploadLabel} photo successfully!`);
+    state.booking.uploadedPhotos.push({
+      slotNumber: activeUploadSlot,
+      slotLabel: activeUploadLabel,
+      file: file,
+      photoUrl: previewUrl,
+      originalFilename: file.name,
+      fileSize: file.size,
+    });
+    showToast(`Attached ${activeUploadLabel} photo!`);
     render();
   } catch (err) {
-    showToast(`Upload failed: ${err.message}`, "error");
+    showToast(`Attachment failed: ${err.message}`, "error");
   }
 }
 
@@ -1619,7 +1637,22 @@ async function handleBookingNext() {
       };
 
       const placed = await API.createOrder(orderData);
-      showToast("Order placed successfully! 🎉");
+
+      // Upload photos as BLOBs to database for this newly created order
+      if (state.booking.uploadedPhotos && state.booking.uploadedPhotos.length > 0) {
+        showToast("Saving sneaker photos to database...");
+        for (const p of state.booking.uploadedPhotos) {
+          if (p.file) {
+            try {
+              await API.uploadOrderPhoto(placed.id, p.slotLabel.toLowerCase(), p.file);
+            } catch (photoErr) {
+              console.error("Photo upload failed:", photoErr);
+            }
+          }
+        }
+      }
+
+      showToast("Order placed successfully with photos! 🎉");
 
       // Reset booking state
       state.booking.selectedServiceIds = [];
@@ -1763,6 +1796,30 @@ function renderActiveOrdersTab(order) {
               ></div>
             </div>
           </div>
+
+          ${
+            order.photoUrls && order.photoUrls.length > 0
+              ? `
+          <!-- Uploaded Condition Photos (Served from Database BLOB) -->
+          <div class="space-y-1.5">
+            <p class="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+              ${renderIcon("camera", "text-primary", 12)} Condition Photos (${order.photoUrls.length})
+            </p>
+            <div class="flex gap-2 overflow-x-auto pb-1">
+              ${order.photoUrls
+                .map(
+                  (url) => `
+                <a href="${url}" target="_blank" class="shrink-0 w-16 h-16 rounded-xl overflow-hidden glass-card border border-primary/20 hover:border-primary transition-all">
+                  <img src="${url}" alt="Condition Photo" class="w-full h-full object-cover" />
+                </a>
+              `
+                )
+                .join("")}
+            </div>
+          </div>
+          `
+              : ""
+          }
 
           <!-- Timeline -->
           <div class="space-y-0">
@@ -2718,6 +2775,12 @@ async function render() {
   } else if (route === "/profile") {
     app.innerHTML = renderProfile();
   } else if (route === "/admin") {
+    const user = state.currentUser;
+    if (!user || user.role !== "ADMIN") {
+      showToast("Access denied: Admin privileges required.", "error");
+      setTimeout(() => navigate("/home"), 50);
+      return;
+    }
     app.innerHTML = await renderAdmin();
   } else {
     app.innerHTML = renderNotFound();

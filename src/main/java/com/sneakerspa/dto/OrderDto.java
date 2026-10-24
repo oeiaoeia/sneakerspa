@@ -22,6 +22,7 @@ public class OrderDto {
     private String eta;
     private String pickupAddress;
     private int photosCount;
+    private List<String> photoUrls = new ArrayList<>();
     private int progressPercentage;
     private List<TrackingStepDto> trackingSteps = new ArrayList<>();
     private String customerEmail;
@@ -171,6 +172,14 @@ public class OrderDto {
 
     public void setPhotosCount(int photosCount) {
         this.photosCount = photosCount;
+    }
+
+    public List<String> getPhotoUrls() {
+        return photoUrls;
+    }
+
+    public void setPhotoUrls(List<String> photoUrls) {
+        this.photoUrls = photoUrls;
     }
 
     public int getProgressPercentage() {

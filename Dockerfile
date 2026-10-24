@@ -14,9 +14,6 @@ RUN mvn clean package -DskipTests
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
-# Create directory for photo uploads
-RUN mkdir -p uploads && chmod 777 uploads
-
 # Copy packaged jar from build stage
 COPY --from=build /app/target/sneakerspa-1.0.0.jar app.jar
 

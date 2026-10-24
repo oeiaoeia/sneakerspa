@@ -24,7 +24,6 @@
 /Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/dto/UserProfileDto.java
 /Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/entity/AddOnEntity.java
 /Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/entity/AddressEntity.java
-/Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/entity/CleaningServiceEntity.java
 /Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/entity/OrderEntity.java
 /Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/entity/OrderItemEntity.java
 /Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/entity/OrderPhotoEntity.java
@@ -61,6 +60,7 @@
 /Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/repository/AddOnRepository.java
 /Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/repository/AddressRepository.java
 /Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/repository/CleaningServiceRepository.java
+/Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/repository/OrderPhotoRepository.java
 /Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/repository/OrderRepository.java
 /Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/repository/PromoCodeRepository.java
 /Users/paramshankar777gmail.com/Downloads/sneakerspa/src/main/java/com/sneakerspa/repository/ReviewRepository.java

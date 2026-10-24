@@ -3,10 +3,8 @@ package com.sneakerspa.service;
 import com.sneakerspa.dto.AddOnDto;
 import com.sneakerspa.dto.ServiceDto;
 import com.sneakerspa.entity.AddOnEntity;
-import com.sneakerspa.entity.CleaningServiceEntity;
 import com.sneakerspa.exception.ResourceNotFoundException;
 import com.sneakerspa.model.service.CleaningService;
-import com.sneakerspa.model.service.ServiceFactory;
 import com.sneakerspa.repository.AddOnRepository;
 import com.sneakerspa.repository.CleaningServiceRepository;
 import org.springframework.stereotype.Service;
@@ -29,7 +27,7 @@ public class CleaningServiceCatalog {
     }
 
     public ServiceDto getServiceById(String id) {
-        CleaningServiceEntity entity = serviceRepository.findById(id)
+        CleaningService entity = serviceRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Cleaning service not found: " + id));
         return toDto(entity);
     }
@@ -44,20 +42,20 @@ public class CleaningServiceCatalog {
         return List.of(getServiceById(id1), getServiceById(id2));
     }
 
-    public ServiceDto toDto(CleaningServiceEntity e) {
+    public ServiceDto toDto(CleaningService s) {
         ServiceDto dto = new ServiceDto();
-        dto.setId(e.getId());
-        dto.setName(e.getName());
-        dto.setPrice("$" + e.getBasePrice().intValue());
-        dto.setRawPrice(e.getBasePrice());
-        dto.setTime(e.getDuration());
-        dto.setDescription(e.getDescription());
-        dto.setRating(e.getRating());
-        dto.setReviews(e.getReviewsCount());
-        dto.setPopular(e.isPopular());
-        dto.setIcon(e.getIconName());
-        dto.setColor(e.getColorGradient());
-        dto.setIncludes(e.getIncludes());
+        dto.setId(s.getId());
+        dto.setName(s.getName());
+        dto.setPrice("$" + s.getBasePrice().intValue());
+        dto.setRawPrice(s.getBasePrice());
+        dto.setTime(s.getDuration());
+        dto.setDescription(s.getDescription());
+        dto.setRating(s.getRating());
+        dto.setReviews(s.getReviewsCount());
+        dto.setPopular(s.isPopular());
+        dto.setIcon(s.getIconName());
+        dto.setColor(s.getColorGradient());
+        dto.setIncludes(s.getIncludes());
         return dto;
     }
 }

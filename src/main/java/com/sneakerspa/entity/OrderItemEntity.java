@@ -2,15 +2,17 @@ package com.sneakerspa.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.sneakerspa.model.Payable;
+import com.sneakerspa.model.service.CleaningService;
 import com.sneakerspa.model.vo.Money;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 
 /**
  * ============================================================================
- * OOP PRINCIPLE: COMPOSITION
- * OrderItem represents one booked service within an Order, including its
- * item price and associated add-ons.
+ * OOP PRINCIPLE: COMPOSITION & ASSOCIATION
+ * OrderItem represents one booked service within an Order. It references the
+ * polymorphic CleaningService entity directly by JPA relationship (@ManyToOne)
+ * instead of a plain string.
  * ============================================================================
  */
 @Entity
@@ -26,11 +28,9 @@ public class OrderItemEntity implements Payable {
     @JsonIgnore
     private OrderEntity order;
 
-    @Column(nullable = false)
-    private String serviceId;
-
-    @Column(nullable = false)
-    private String serviceName;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "service_id", nullable = false)
+    private CleaningService service;
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
@@ -40,9 +40,8 @@ public class OrderItemEntity implements Payable {
 
     public OrderItemEntity() {}
 
-    public OrderItemEntity(String serviceId, String serviceName, BigDecimal price, String addOnsSummary) {
-        this.serviceId = serviceId;
-        this.serviceName = serviceName;
+    public OrderItemEntity(CleaningService service, BigDecimal price, String addOnsSummary) {
+        this.service = service;
         this.price = price;
         this.addOnsSummary = addOnsSummary;
     }
@@ -68,20 +67,20 @@ public class OrderItemEntity implements Payable {
         this.order = order;
     }
 
-    public String getServiceId() {
-        return serviceId;
+    public CleaningService getService() {
+        return service;
     }
 
-    public void setServiceId(String serviceId) {
-        this.serviceId = serviceId;
+    public void setService(CleaningService service) {
+        this.service = service;
+    }
+
+    public String getServiceId() {
+        return service != null ? service.getId() : null;
     }
 
     public String getServiceName() {
-        return serviceName;
-    }
-
-    public void setServiceName(String serviceName) {
-        this.serviceName = serviceName;
+        return service != null ? service.getName() : null;
     }
 
     public BigDecimal getPrice() {

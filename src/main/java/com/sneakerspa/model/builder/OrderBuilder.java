@@ -6,7 +6,6 @@ import com.sneakerspa.model.service.CleaningService;
 import com.sneakerspa.model.strategy.PricingStrategy;
 import com.sneakerspa.model.strategy.StandardPricing;
 import com.sneakerspa.model.vo.Money;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -89,8 +88,7 @@ public class OrderBuilder {
         String summary = addOnNames.isEmpty() ? "" : String.join(", ", addOnNames);
 
         OrderItemEntity itemEntity = new OrderItemEntity(
-                service.getId(),
-                service.getName(),
+                service,
                 itemPrice.getAmount(),
                 summary
         );
@@ -98,8 +96,8 @@ public class OrderBuilder {
         return this;
     }
 
-    public OrderBuilder addPhoto(int slotNumber, String slotLabel, String photoUrl, String originalFilename, Long fileSize) {
-        OrderPhotoEntity photo = new OrderPhotoEntity(slotNumber, slotLabel, photoUrl, originalFilename, fileSize);
+    public OrderBuilder addPhoto(int slotNumber, String slotLabel, byte[] data, String contentType, String originalFilename, Long fileSize) {
+        OrderPhotoEntity photo = new OrderPhotoEntity(slotNumber, slotLabel, data, contentType, originalFilename, fileSize);
         photos.add(photo);
         return this;
     }

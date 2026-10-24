@@ -12,6 +12,7 @@ import com.sneakerspa.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Service
@@ -44,8 +45,10 @@ public class UserService {
         dto.setCleaningsLeft(user.getCleaningsLeft());
         dto.setNotificationsEnabled(user.isNotificationsEnabled());
         dto.setDarkModeEnabled(user.isDarkModeEnabled());
-        dto.setTotalOrders(Math.max(orderCount, 3)); // Match demo baseline stats
-        dto.setMemberSince("Jan '25");
+        dto.setTotalOrders((int) orderCount);
+
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("MMM ''yy");
+        dto.setMemberSince(user.getCreatedAt() != null ? user.getCreatedAt().format(dtf) : "Jan '25");
 
         return dto;
     }

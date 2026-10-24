@@ -1,21 +1,26 @@
 package com.sneakerspa.model.service;
 
 import com.sneakerspa.model.vo.Money;
+import jakarta.persistence.DiscriminatorValue;
+import jakarta.persistence.Entity;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 
 /**
  * ============================================================================
- * OOP PRINCIPLE: INHERITANCE & POLYMORPHISM
+ * OOP PRINCIPLE: INHERITANCE & POLYMORPHISM (JPA ENTITY SUBCLASS)
  * DeepClean specializes CleaningService for heavy dirt, stained soles, and deep cleans.
  * Marked as our flagship popular service.
  * ============================================================================
  */
+@Entity
+@DiscriminatorValue("DEEP")
 public class DeepClean extends CleaningService {
     private static final long serialVersionUID = 1L;
 
     public static final String ID = "deep-clean";
-    public static final Money PRICE = Money.of(45);
+    public static final BigDecimal PRICE = BigDecimal.valueOf(45);
     public static final String DURATION = "2-3 days";
 
     public DeepClean() {
@@ -24,6 +29,7 @@ public class DeepClean extends CleaningService {
                 "Deep Clean",
                 "Full disassembly cleaning, stain removal, and sole restoration.",
                 PRICE,
+                DURATION,
                 4.9,
                 528,
                 true,
@@ -34,7 +40,7 @@ public class DeepClean extends CleaningService {
 
     @Override
     public Money calculatePrice(Set<AddOn> addOns) {
-        Money total = getBasePrice();
+        Money total = Money.of(getBasePrice());
         if (addOns != null) {
             for (AddOn addOn : addOns) {
                 total = total.add(addOn.getPrice());

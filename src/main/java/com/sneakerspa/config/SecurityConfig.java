@@ -47,7 +47,6 @@ public class SecurityConfig {
                                 "/css/**",
                                 "/js/**",
                                 "/images/**",
-                                "/uploads/**",
                                 "/favicon.ico",
                                 "/h2-console/**"
                         ).permitAll()
@@ -58,6 +57,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/addons", "/api/addons/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/reviews", "/api/reviews/**").permitAll()
                         .requestMatchers("/api/orders/calculate-price").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/orders/*/photos/**").permitAll()
 
                         // Admin API endpoints
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

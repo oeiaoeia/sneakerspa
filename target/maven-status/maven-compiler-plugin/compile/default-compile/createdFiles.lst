@@ -9,6 +9,7 @@ com/sneakerspa/dto/AddressDto.class
 com/sneakerspa/dto/ReviewDto.class
 com/sneakerspa/repository/PromoCodeRepository.class
 com/sneakerspa/entity/Role.class
+com/sneakerspa/repository/OrderPhotoRepository.class
 com/sneakerspa/model/strategy/StandardPricing.class
 com/sneakerspa/exception/ResourceNotFoundException.class
 com/sneakerspa/dto/UploadedPhotoDto.class
@@ -32,7 +33,6 @@ com/sneakerspa/security/CustomUserDetailsService.class
 com/sneakerspa/entity/AddOnEntity.class
 com/sneakerspa/controller/UserController.class
 com/sneakerspa/repository/AddOnRepository.class
-com/sneakerspa/entity/CleaningServiceEntity.class
 com/sneakerspa/service/PricingService$PricingCalculationResult.class
 com/sneakerspa/exception/InvalidPromoCodeException.class
 com/sneakerspa/model/strategy/PricingStrategy.class

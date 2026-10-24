@@ -3,10 +3,12 @@ package com.sneakerspa.security;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -19,9 +21,27 @@ public class JwtUtil {
     private final long expirationMs;
 
     public JwtUtil(
-            @Value("${app.jwt.secret:9a3b6c2d8e4f0a1b3c5e7g9i1k3m5o7q9s1u3w5y7z9b1d3f5h7j9l1n3p5r7t9v}") String secret,
-            @Value("${app.jwt.expiration-ms:86400000}") long expirationMs
+            @Value("${app.jwt.secret:}") String secret,
+            @Value("${app.jwt.expiration-ms:86400000}") long expirationMs,
+            Environment env
     ) {
+        boolean isProd = Arrays.asList(env.getActiveProfiles()).contains("prod");
+        if (isProd) {
+            String appJwtSecret = env.getProperty("APP_JWT_SECRET");
+            if (appJwtSecret == null || appJwtSecret.trim().isEmpty()) {
+                throw new IllegalStateException("CRITICAL STARTUP ERROR: APP_JWT_SECRET environment variable is required in production profile!");
+            }
+            secret = appJwtSecret.trim();
+        } else {
+            if (secret == null || secret.trim().isEmpty()) {
+                secret = "dev_default_secret_9a3b6c2d8e4f0a1b3c5e7g9i1k3m5o7q9s1u3w5y7z9b1d3f5h7j9l1n3p5r7t9v";
+            }
+        }
+
+        if (secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalArgumentException("JWT secret key must be at least 256 bits (32 bytes)");
+        }
+
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expirationMs = expirationMs;
     }

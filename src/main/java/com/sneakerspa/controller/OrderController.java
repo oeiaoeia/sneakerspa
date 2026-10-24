@@ -1,23 +1,24 @@
 package com.sneakerspa.controller;
 
 import com.sneakerspa.dto.*;
+import com.sneakerspa.entity.OrderPhotoEntity;
 import com.sneakerspa.entity.UserEntity;
+import com.sneakerspa.exception.BadRequestException;
 import com.sneakerspa.service.AuthService;
 import com.sneakerspa.service.OrderService;
 import com.sneakerspa.service.PricingService;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -26,9 +27,6 @@ public class OrderController {
     private final OrderService orderService;
     private final AuthService authService;
     private final PricingService pricingService;
-
-    @Value("${app.upload.dir:uploads}")
-    private String uploadDir;
 
     public OrderController(OrderService orderService, AuthService authService, PricingService pricingService) {
         this.orderService = orderService;
@@ -98,42 +96,115 @@ public class OrderController {
         return ResponseEntity.ok(resp);
     }
 
-    @PostMapping("/upload-photo")
-    public ResponseEntity<Map<String, Object>> uploadPhoto(
+    /**
+     * Serves order photos stored as BLOBs in the database.
+     * Accessible by Order ID (or tracking number) and angle label (e.g. front, back, sole, side).
+     */
+    @GetMapping("/{id}/photos/{angle}")
+    public ResponseEntity<byte[]> getOrderPhoto(
+            @PathVariable("id") String id,
+            @PathVariable("angle") String angle
+    ) {
+        OrderPhotoEntity photo = orderService.getOrderPhoto(id, angle);
+        MediaType mediaType;
+        try {
+            mediaType = MediaType.parseMediaType(photo.getContentType());
+        } catch (Exception e) {
+            mediaType = MediaType.IMAGE_JPEG;
+        }
+
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + photo.getOriginalFilename() + "\"")
+                .body(photo.getData());
+    }
+
+    /**
+     * Upload photo for an order.
+     * Enforces:
+     * - Limit uploads to 2 MB
+     * - Image types only (image/jpeg, image/png, image/webp)
+     * - Stored as BLOB in database (zero disk writes)
+     */
+    @PostMapping("/{id}/photos/{angle}")
+    public ResponseEntity<Map<String, Object>> uploadOrderPhotoByAngle(
+            @PathVariable("id") String id,
+            @PathVariable("angle") String angle,
+            @RequestParam("file") MultipartFile file
+    ) throws IOException {
+        validatePhotoUpload(file);
+
+        int slotNumber = switch (angle.toLowerCase()) {
+            case "front" -> 1;
+            case "back" -> 2;
+            case "sole" -> 3;
+            case "side" -> 4;
+            default -> 1;
+        };
+        String slotLabel = angle.substring(0, 1).toUpperCase() + angle.substring(1).toLowerCase();
+
+        OrderPhotoEntity photo = orderService.addPhotoToOrder(
+                id,
+                slotNumber,
+                slotLabel,
+                file.getBytes(),
+                file.getContentType(),
+                file.getOriginalFilename()
+        );
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("photoUrl", "/api/orders/" + id + "/photos/" + angle.toLowerCase());
+        resp.put("slotNumber", photo.getSlotNumber());
+        resp.put("slotLabel", photo.getSlotLabel());
+        resp.put("originalFilename", photo.getOriginalFilename());
+        resp.put("fileSize", photo.getFileSize());
+        resp.put("status", "UPLOADED_TO_DB_BLOB");
+
+        return ResponseEntity.ok(resp);
+    }
+
+    @PostMapping("/{id}/photos")
+    public ResponseEntity<Map<String, Object>> uploadOrderPhoto(
+            @PathVariable("id") String id,
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "slotNumber", defaultValue = "1") int slotNumber,
             @RequestParam(value = "slotLabel", defaultValue = "Photo") String slotLabel
     ) throws IOException {
-        if (file.isEmpty()) {
-            throw new IllegalArgumentException("Cannot upload empty file");
+        validatePhotoUpload(file);
+
+        OrderPhotoEntity photo = orderService.addPhotoToOrder(
+                id,
+                slotNumber,
+                slotLabel,
+                file.getBytes(),
+                file.getContentType(),
+                file.getOriginalFilename()
+        );
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("photoUrl", "/api/orders/" + id + "/photos/" + slotLabel.toLowerCase());
+        resp.put("slotNumber", photo.getSlotNumber());
+        resp.put("slotLabel", photo.getSlotLabel());
+        resp.put("originalFilename", photo.getOriginalFilename());
+        resp.put("fileSize", photo.getFileSize());
+        resp.put("status", "UPLOADED_TO_DB_BLOB");
+
+        return ResponseEntity.ok(resp);
+    }
+
+    private void validatePhotoUpload(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Uploaded file cannot be empty");
         }
-
-        Path uploadPath = Paths.get(uploadDir).toAbsolutePath();
-        if (!Files.exists(uploadPath)) {
-            Files.createDirectories(uploadPath);
+        // Limit upload to 2 MB
+        if (file.getSize() > 2 * 1024 * 1024) {
+            throw new BadRequestException("File size exceeds 2 MB limit (uploaded size: " + (file.getSize() / 1024) + " KB)");
         }
-
-        String originalFilename = file.getOriginalFilename();
-        String extension = "";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        } else {
-            extension = ".jpg";
+        // Image types only
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
+            throw new BadRequestException("Only image uploads are permitted (e.g. image/jpeg, image/png, image/webp)");
         }
-
-        String savedFilename = "sneaker_" + UUID.randomUUID() + extension;
-        Path targetPath = uploadPath.resolve(savedFilename);
-        Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
-
-        String photoUrl = "/uploads/" + savedFilename;
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("photoUrl", photoUrl);
-        response.put("originalFilename", originalFilename);
-        response.put("fileSize", file.getSize());
-        response.put("slotNumber", slotNumber);
-        response.put("slotLabel", slotLabel);
-
-        return ResponseEntity.ok(response);
     }
 }

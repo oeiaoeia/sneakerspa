@@ -191,6 +191,15 @@ const API = {
     });
   },
 
+  async uploadOrderPhoto(orderId, angle, file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return await this.request(`/api/orders/${encodeURIComponent(orderId)}/photos/${encodeURIComponent(angle)}`, {
+      method: "POST",
+      body: formData,
+    });
+  },
+
   // Profile & Addresses
   async getProfile() {
     return await this.request("/api/user/profile");

@@ -1,17 +1,25 @@
 package com.sneakerspa.config;
 
 import com.sneakerspa.entity.*;
+import com.sneakerspa.model.service.*;
 import com.sneakerspa.repository.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.env.Environment;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 
 @Component
 public class DataInitializer implements CommandLineRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
 
     private final CleaningServiceRepository serviceRepository;
     private final AddOnRepository addOnRepository;
@@ -21,6 +29,7 @@ public class DataInitializer implements CommandLineRunner {
     private final OrderRepository orderRepository;
     private final ReviewRepository reviewRepository;
     private final PasswordEncoder passwordEncoder;
+    private final Environment environment;
 
     public DataInitializer(
             CleaningServiceRepository serviceRepository,
@@ -30,7 +39,8 @@ public class DataInitializer implements CommandLineRunner {
             AddressRepository addressRepository,
             OrderRepository orderRepository,
             ReviewRepository reviewRepository,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            Environment environment
     ) {
         this.serviceRepository = serviceRepository;
         this.addOnRepository = addOnRepository;
@@ -40,6 +50,7 @@ public class DataInitializer implements CommandLineRunner {
         this.orderRepository = orderRepository;
         this.reviewRepository = reviewRepository;
         this.passwordEncoder = passwordEncoder;
+        this.environment = environment;
     }
 
     @Override
@@ -48,67 +59,29 @@ public class DataInitializer implements CommandLineRunner {
         seedAddOns();
         seedPromoCodes();
         seedReviews();
-        seedUsersAndOrders();
+
+        List<String> activeProfiles = Arrays.asList(environment.getActiveProfiles());
+        boolean isProd = activeProfiles.contains("prod");
+        boolean isDev = activeProfiles.contains("dev") || activeProfiles.isEmpty();
+
+        if (isDev) {
+            log.info("Running in DEV profile: seeding demo users and orders.");
+            seedDevUsersAndOrders();
+        } else if (isProd) {
+            log.info("Running in PROD profile: demo users skipped. Checking ADMIN_EMAIL & ADMIN_PASSWORD env vars.");
+            seedProdAdmin();
+        }
     }
 
     private void seedServices() {
         if (serviceRepository.count() > 0) return;
 
-        serviceRepository.save(new CleaningServiceEntity(
-                "basic-clean",
-                "Basic Clean",
-                "Surface cleaning, lace wash, and deodorization for everyday freshness.",
-                BigDecimal.valueOf(25),
-                "1-2 days",
-                4.8,
-                342,
-                false,
-                "Droplets",
-                "from-blue-500/20 to-cyan-500/10",
-                List.of("Surface dirt removal", "Lace wash & whitening", "Deodorization", "Quick dry")
-        ));
-
-        serviceRepository.save(new CleaningServiceEntity(
-                "deep-clean",
-                "Deep Clean",
-                "Full disassembly cleaning, stain removal, and sole restoration.",
-                BigDecimal.valueOf(45),
-                "2-3 days",
-                4.9,
-                528,
-                true,
-                "Brush",
-                "from-purple-500/20 to-blue-500/10",
-                List.of("Full disassembly", "Deep stain removal", "Sole whitening & restoration", "Insole replacement", "Protective coating")
-        ));
-
-        serviceRepository.save(new CleaningServiceEntity(
-                "premium-restoration",
-                "Premium Restoration",
-                "Complete restoration including color touch-up, re-gluing, and protective coating.",
-                BigDecimal.valueOf(75),
-                "3-5 days",
-                5.0,
-                189,
-                false,
-                "SprayCan",
-                "from-amber-500/20 to-orange-500/10",
-                List.of("Everything in Deep Clean", "Color touch-up & repainting", "Re-gluing & structural repair", "Premium protective coating", "Before/after photo report")
-        ));
-
-        serviceRepository.save(new CleaningServiceEntity(
-                "suede-care",
-                "Suede Care",
-                "Specialized suede and nubuck treatment with waterproof protection.",
-                BigDecimal.valueOf(55),
-                "2-4 days",
-                4.9,
-                215,
-                false,
-                "Shield",
-                "from-emerald-500/20 to-teal-500/10",
-                List.of("Gentle suede brushing", "Stain & scuff removal", "Color restoration", "Waterproof nano-coating", "Suede protector spray")
-        ));
+        // Subclasses mapped via SINGLE_TABLE JPA inheritance
+        serviceRepository.save(new BasicClean());
+        serviceRepository.save(new DeepClean());
+        serviceRepository.save(new PremiumRestoration());
+        serviceRepository.save(new SuedeCare());
+        log.info("Seeded 4 polymorphic CleaningService entities.");
     }
 
     private void seedAddOns() {
@@ -133,8 +106,29 @@ public class DataInitializer implements CommandLineRunner {
         reviewRepository.save(new ReviewEntity("Maria L.", 5, "The suede care saved my favorite boots. Thank you!", "1 week ago", "M", 15));
     }
 
-    private void seedUsersAndOrders() {
-        // Seed Admin user
+    private void seedProdAdmin() {
+        String adminEmail = environment.getProperty("ADMIN_EMAIL");
+        String adminPassword = environment.getProperty("ADMIN_PASSWORD");
+
+        if (adminEmail != null && !adminEmail.isBlank() && adminPassword != null && !adminPassword.isBlank()) {
+            String cleanEmail = adminEmail.trim().toLowerCase();
+            if (!userRepository.existsByEmail(cleanEmail)) {
+                UserEntity admin = new UserEntity(
+                        "Administrator",
+                        cleanEmail,
+                        passwordEncoder.encode(adminPassword.trim()),
+                        Role.ADMIN
+                );
+                userRepository.save(admin);
+                log.info("Production admin created successfully from ADMIN_EMAIL env var: {}", cleanEmail);
+            }
+        } else {
+            log.warn("Production profile active, but ADMIN_EMAIL or ADMIN_PASSWORD environment variable not set. No admin seeded.");
+        }
+    }
+
+    private void seedDevUsersAndOrders() {
+        // Seed Dev Admin
         if (!userRepository.existsByEmail("admin@sneakerspa.com")) {
             UserEntity admin = new UserEntity(
                     "Spa Admin",
@@ -145,7 +139,7 @@ public class DataInitializer implements CommandLineRunner {
             userRepository.save(admin);
         }
 
-        // Seed Customer user
+        // Seed Customer user Alex Johnson (matching prototype)
         if (!userRepository.existsByEmail("alex@email.com")) {
             UserEntity alex = new UserEntity(
                     "Alex Johnson",
@@ -159,6 +153,7 @@ public class DataInitializer implements CommandLineRunner {
             alex.setCleaningsLeft(1);
             alex.setNotificationsEnabled(true);
             alex.setDarkModeEnabled(true);
+            alex.setCreatedAt(LocalDateTime.of(2025, 1, 15, 9, 30)); // Member Since Jan '25
 
             UserEntity savedAlex = userRepository.save(alex);
 
@@ -170,6 +165,11 @@ public class DataInitializer implements CommandLineRunner {
             AddressEntity officeAddr = new AddressEntity("Office", "456 Business Ave, Floor 12", "New York", "10016", false);
             officeAddr.setUser(savedAlex);
             addressRepository.save(officeAddr);
+
+            CleaningService basicClean = serviceRepository.findById("basic-clean").orElse(null);
+            CleaningService deepClean = serviceRepository.findById("deep-clean").orElse(null);
+            CleaningService premiumRestoration = serviceRepository.findById("premium-restoration").orElse(null);
+            CleaningService suedeCare = serviceRepository.findById("suede-care").orElse(null);
 
             // Seed Active Order #SNK-2847
             OrderEntity activeOrder = new OrderEntity();
@@ -190,13 +190,21 @@ public class DataInitializer implements CommandLineRunner {
             activeOrder.setCreatedAt(LocalDateTime.now().minusHours(4));
             activeOrder.setUpdatedAt(LocalDateTime.now().minusHours(1));
 
-            OrderItemEntity item = new OrderItemEntity("deep-clean", "Deep Clean", BigDecimal.valueOf(45), "Protective Coating");
+            OrderItemEntity item = new OrderItemEntity(deepClean, BigDecimal.valueOf(45), "Protective Coating");
             activeOrder.addOrderItem(item);
 
-            // 3 sample uploaded photos
-            activeOrder.addPhoto(new OrderPhotoEntity(1, "Front", "/images/hero-sneaker.jpg", "front.jpg", 102400L));
-            activeOrder.addPhoto(new OrderPhotoEntity(2, "Back", "/images/before-after.jpg", "back.jpg", 102400L));
-            activeOrder.addPhoto(new OrderPhotoEntity(3, "Sole", "/images/cleaning-process.jpg", "sole.jpg", 102400L));
+            // Seed real BLOB photos for demo order
+            try {
+                byte[] heroBytes = new ClassPathResource("static/images/hero-sneaker.jpg").getContentAsByteArray();
+                byte[] beforeAfterBytes = new ClassPathResource("static/images/before-after.jpg").getContentAsByteArray();
+                byte[] processBytes = new ClassPathResource("static/images/cleaning-process.jpg").getContentAsByteArray();
+
+                activeOrder.addPhoto(new OrderPhotoEntity(1, "Front", heroBytes, "image/jpeg", "front.jpg", (long) heroBytes.length));
+                activeOrder.addPhoto(new OrderPhotoEntity(2, "Back", beforeAfterBytes, "image/jpeg", "back.jpg", (long) beforeAfterBytes.length));
+                activeOrder.addPhoto(new OrderPhotoEntity(3, "Sole", processBytes, "image/jpeg", "sole.jpg", (long) processBytes.length));
+            } catch (Exception e) {
+                log.warn("Could not read classpath images for BLOB seed: {}", e.getMessage());
+            }
 
             // Status tracking steps matching Orders.tsx
             activeOrder.addStatusHistory(new OrderStatusHistoryEntity(
@@ -242,55 +250,61 @@ public class DataInitializer implements CommandLineRunner {
 
             orderRepository.save(activeOrder);
 
-            // Seed Past Orders matching Orders.tsx
+            // Seed Past Orders (11 past orders + 1 active = 12 total orders)
             // 1. SNK-2831: Basic Clean, $25, Delivered, Mar 15, 2026, rating: 5
-            OrderEntity past1 = new OrderEntity();
-            past1.setTrackingNumber("SNK-2831");
-            past1.setCustomer(savedAlex);
-            past1.setStreet("123 Main Street, Apt 4B");
-            past1.setCity("New York");
-            past1.setZip("10001");
-            past1.setSubtotal(BigDecimal.valueOf(25));
-            past1.setDiscountAmount(BigDecimal.ZERO);
-            past1.setTotalAmount(BigDecimal.valueOf(25));
-            past1.setCurrentStatus(OrderStatus.DELIVERED);
-            past1.setRating(5);
-            past1.setRatingSubmittedAt(LocalDateTime.now().minusDays(10));
-            past1.setCreatedAt(LocalDateTime.now().minusDays(15));
-            past1.addOrderItem(new OrderItemEntity("basic-clean", "Basic Clean", BigDecimal.valueOf(25), ""));
-            orderRepository.save(past1);
+            createPastOrder(savedAlex, "SNK-2831", basicClean, 25, OrderStatus.DELIVERED, 5, 15);
 
             // 2. SNK-2790: Suede Care, $55, Delivered, Feb 28, 2026, unrated
-            OrderEntity past2 = new OrderEntity();
-            past2.setTrackingNumber("SNK-2790");
-            past2.setCustomer(savedAlex);
-            past2.setStreet("123 Main Street, Apt 4B");
-            past2.setCity("New York");
-            past2.setZip("10001");
-            past2.setSubtotal(BigDecimal.valueOf(55));
-            past2.setDiscountAmount(BigDecimal.ZERO);
-            past2.setTotalAmount(BigDecimal.valueOf(55));
-            past2.setCurrentStatus(OrderStatus.DELIVERED);
-            past2.setCreatedAt(LocalDateTime.now().minusDays(30));
-            past2.addOrderItem(new OrderItemEntity("suede-care", "Suede Care", BigDecimal.valueOf(55), ""));
-            orderRepository.save(past2);
+            createPastOrder(savedAlex, "SNK-2790", suedeCare, 55, OrderStatus.DELIVERED, null, 30);
 
             // 3. SNK-2745: Deep Clean, $45, Delivered, Feb 10, 2026, rating: 4
-            OrderEntity past3 = new OrderEntity();
-            past3.setTrackingNumber("SNK-2745");
-            past3.setCustomer(savedAlex);
-            past3.setStreet("123 Main Street, Apt 4B");
-            past3.setCity("New York");
-            past3.setZip("10001");
-            past3.setSubtotal(BigDecimal.valueOf(45));
-            past3.setDiscountAmount(BigDecimal.ZERO);
-            past3.setTotalAmount(BigDecimal.valueOf(45));
-            past3.setCurrentStatus(OrderStatus.DELIVERED);
-            past3.setRating(4);
-            past3.setRatingSubmittedAt(LocalDateTime.now().minusDays(45));
-            past3.setCreatedAt(LocalDateTime.now().minusDays(48));
-            past3.addOrderItem(new OrderItemEntity("deep-clean", "Deep Clean", BigDecimal.valueOf(45), ""));
-            orderRepository.save(past3);
+            createPastOrder(savedAlex, "SNK-2745", deepClean, 45, OrderStatus.DELIVERED, 4, 48);
+
+            // 4. SNK-2712: Basic Clean, $25, Delivered, Jan 29, 2026, rating: 5
+            createPastOrder(savedAlex, "SNK-2712", basicClean, 25, OrderStatus.DELIVERED, 5, 60);
+
+            // 5. SNK-2688: Premium Restoration, $75, Delivered, Jan 14, 2026, rating: 5
+            createPastOrder(savedAlex, "SNK-2688", premiumRestoration, 75, OrderStatus.DELIVERED, 5, 75);
+
+            // 6. SNK-2640: Deep Clean, $45, Delivered, Dec 20, 2025, rating: 4
+            createPastOrder(savedAlex, "SNK-2640", deepClean, 45, OrderStatus.DELIVERED, 4, 100);
+
+            // 7. SNK-2601: Basic Clean, $25, Delivered, Nov 18, 2025, rating: 5
+            createPastOrder(savedAlex, "SNK-2601", basicClean, 25, OrderStatus.DELIVERED, 5, 132);
+
+            // 8. SNK-2550: Suede Care, $55, Delivered, Oct 25, 2025, rating: 5
+            createPastOrder(savedAlex, "SNK-2550", suedeCare, 55, OrderStatus.DELIVERED, 5, 156);
+
+            // 9. SNK-2510: Deep Clean, $45, Delivered, Sep 12, 2025, rating: 4
+            createPastOrder(savedAlex, "SNK-2510", deepClean, 45, OrderStatus.DELIVERED, 4, 199);
+
+            // 10. SNK-2470: Basic Clean, $25, Delivered, Aug 05, 2025, rating: 5
+            createPastOrder(savedAlex, "SNK-2470", basicClean, 25, OrderStatus.DELIVERED, 5, 237);
+
+            // 11. SNK-2420: Premium Restoration, $75, Delivered, Jul 19, 2025, rating: 5
+            createPastOrder(savedAlex, "SNK-2420", premiumRestoration, 75, OrderStatus.DELIVERED, 5, 254);
+
+            log.info("Seeded Alex Johnson with 1 active and 11 past orders (12 total orders).");
         }
+    }
+
+    private void createPastOrder(UserEntity user, String trackingNumber, CleaningService service, int price, OrderStatus status, Integer rating, int daysAgo) {
+        OrderEntity past = new OrderEntity();
+        past.setTrackingNumber(trackingNumber);
+        past.setCustomer(user);
+        past.setStreet("123 Main Street, Apt 4B");
+        past.setCity("New York");
+        past.setZip("10001");
+        past.setSubtotal(BigDecimal.valueOf(price));
+        past.setDiscountAmount(BigDecimal.ZERO);
+        past.setTotalAmount(BigDecimal.valueOf(price));
+        past.setCurrentStatus(status);
+        past.setRating(rating);
+        if (rating != null) {
+            past.setRatingSubmittedAt(LocalDateTime.now().minusDays(daysAgo - 2));
+        }
+        past.setCreatedAt(LocalDateTime.now().minusDays(daysAgo));
+        past.addOrderItem(new OrderItemEntity(service, BigDecimal.valueOf(price), ""));
+        orderRepository.save(past);
     }
 }

@@ -7,8 +7,8 @@ import java.time.LocalDateTime;
 /**
  * ============================================================================
  * OOP PRINCIPLE: COMPOSITION
- * Represents one of the 4 photos uploaded for sneaker condition assessment:
- * 1: Front, 2: Back, 3: Sole, 4: Side.
+ * Represents one of the photos uploaded for sneaker condition assessment:
+ * stored directly in the database as a binary BLOB with content-type metadata.
  * ============================================================================
  */
 @Entity
@@ -30,8 +30,14 @@ public class OrderPhotoEntity {
     @Column(nullable = false)
     private String slotLabel; // "Front", "Back", "Sole", "Side"
 
+    @Lob
+    @Basic(fetch = FetchType.LAZY)
+    @Column(name = "photo_data", nullable = false)
+    @JsonIgnore
+    private byte[] data;
+
     @Column(nullable = false)
-    private String photoUrl;
+    private String contentType; // e.g. "image/jpeg", "image/png"
 
     private String originalFilename;
 
@@ -42,12 +48,13 @@ public class OrderPhotoEntity {
 
     public OrderPhotoEntity() {}
 
-    public OrderPhotoEntity(int slotNumber, String slotLabel, String photoUrl, String originalFilename, Long fileSize) {
+    public OrderPhotoEntity(int slotNumber, String slotLabel, byte[] data, String contentType, String originalFilename, Long fileSize) {
         this.slotNumber = slotNumber;
         this.slotLabel = slotLabel;
-        this.photoUrl = photoUrl;
-        this.originalFilename = originalFilename;
-        this.fileSize = fileSize;
+        this.data = data;
+        this.contentType = contentType != null ? contentType : "image/jpeg";
+        this.originalFilename = originalFilename != null ? originalFilename : slotLabel.toLowerCase() + ".jpg";
+        this.fileSize = fileSize != null ? fileSize : (data != null ? (long) data.length : 0L);
         this.uploadedAt = LocalDateTime.now();
     }
 
@@ -83,12 +90,20 @@ public class OrderPhotoEntity {
         this.slotLabel = slotLabel;
     }
 
-    public String getPhotoUrl() {
-        return photoUrl;
+    public byte[] getData() {
+        return data;
     }
 
-    public void setPhotoUrl(String photoUrl) {
-        this.photoUrl = photoUrl;
+    public void setData(byte[] data) {
+        this.data = data;
+    }
+
+    public String getContentType() {
+        return contentType;
+    }
+
+    public void setContentType(String contentType) {
+        this.contentType = contentType;
     }
 
     public String getOriginalFilename() {

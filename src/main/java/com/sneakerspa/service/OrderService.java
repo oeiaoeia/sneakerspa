@@ -2,22 +2,21 @@ package com.sneakerspa.service;
 
 import com.sneakerspa.dto.*;
 import com.sneakerspa.entity.*;
+import com.sneakerspa.exception.BadRequestException;
 import com.sneakerspa.exception.OrderNotFoundException;
 import com.sneakerspa.exception.ResourceNotFoundException;
 import com.sneakerspa.model.builder.OrderBuilder;
 import com.sneakerspa.model.observer.StatusChangeSubject;
 import com.sneakerspa.model.service.AddOn;
 import com.sneakerspa.model.service.CleaningService;
-import com.sneakerspa.model.service.ServiceFactory;
-import com.sneakerspa.model.strategy.PricingStrategy;
-import com.sneakerspa.model.vo.Money;
+import com.sneakerspa.repository.CleaningServiceRepository;
+import com.sneakerspa.repository.OrderPhotoRepository;
 import com.sneakerspa.repository.OrderRepository;
 import com.sneakerspa.repository.PromoCodeRepository;
 import com.sneakerspa.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -25,8 +24,10 @@ import java.util.*;
 public class OrderService {
 
     private final OrderRepository orderRepository;
+    private final OrderPhotoRepository orderPhotoRepository;
     private final UserRepository userRepository;
     private final PromoCodeRepository promoCodeRepository;
+    private final CleaningServiceRepository serviceRepository;
     private final PricingService pricingService;
     private final StatusChangeSubject statusSubject;
 
@@ -34,14 +35,18 @@ public class OrderService {
 
     public OrderService(
             OrderRepository orderRepository,
+            OrderPhotoRepository orderPhotoRepository,
             UserRepository userRepository,
             PromoCodeRepository promoCodeRepository,
+            CleaningServiceRepository serviceRepository,
             PricingService pricingService,
             StatusChangeSubject statusSubject
     ) {
         this.orderRepository = orderRepository;
+        this.orderPhotoRepository = orderPhotoRepository;
         this.userRepository = userRepository;
         this.promoCodeRepository = promoCodeRepository;
+        this.serviceRepository = serviceRepository;
         this.pricingService = pricingService;
         this.statusSubject = statusSubject;
     }
@@ -73,28 +78,16 @@ public class OrderService {
                 .withPromoCode(request.getPromoCode())
                 .usingPricingStrategy(pricingResult.strategyUsed());
 
-        // Add first service with add-ons polymorphically
+        // Add services polymorphically
         boolean first = true;
         for (String sId : serviceIds) {
-            CleaningService service = ServiceFactory.createService(sId);
+            CleaningService service = serviceRepository.findById(sId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Service not found with id: " + sId));
             if (first) {
                 builder.addServiceItem(service, domainAddOns);
                 first = false;
             } else {
                 builder.addServiceItem(service, Collections.emptySet());
-            }
-        }
-
-        // Add uploaded photos
-        if (request.getPhotos() != null) {
-            for (UploadedPhotoDto photoDto : request.getPhotos()) {
-                builder.addPhoto(
-                        photoDto.getSlotNumber(),
-                        photoDto.getSlotLabel(),
-                        photoDto.getPhotoUrl(),
-                        photoDto.getOriginalFilename(),
-                        photoDto.getFileSize()
-                );
             }
         }
 
@@ -123,6 +116,53 @@ public class OrderService {
         );
 
         return toDto(savedOrder);
+    }
+
+    @Transactional
+    public OrderPhotoEntity addPhotoToOrder(
+            String orderIdOrTracking,
+            int slotNumber,
+            String slotLabel,
+            byte[] data,
+            String contentType,
+            String originalFilename
+    ) {
+        OrderEntity order = findOrder(orderIdOrTracking);
+
+        // Remove existing photo for this slot if present
+        order.getPhotos().removeIf(p -> p.getSlotNumber() == slotNumber || p.getSlotLabel().equalsIgnoreCase(slotLabel));
+
+        OrderPhotoEntity photo = new OrderPhotoEntity(
+                slotNumber,
+                slotLabel,
+                data,
+                contentType,
+                originalFilename,
+                (long) data.length
+        );
+        order.addPhoto(photo);
+        orderRepository.save(order);
+        return photo;
+    }
+
+    @Transactional(readOnly = true)
+    public OrderPhotoEntity getOrderPhoto(String orderIdOrTracking, String angle) {
+        OrderEntity order = findOrder(orderIdOrTracking);
+        return order.getPhotos().stream()
+                .filter(p -> p.getSlotLabel().equalsIgnoreCase(angle) || String.valueOf(p.getSlotNumber()).equalsIgnoreCase(angle))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Photo not found for order: " + orderIdOrTracking + ", angle: " + angle));
+    }
+
+    private OrderEntity findOrder(String orderIdOrTracking) {
+        try {
+            Long id = Long.parseLong(orderIdOrTracking);
+            Optional<OrderEntity> opt = orderRepository.findById(id);
+            if (opt.isPresent()) return opt.get();
+        } catch (NumberFormatException ignored) {}
+
+        return orderRepository.findByTrackingNumber(orderIdOrTracking)
+                .orElseThrow(() -> new OrderNotFoundException(orderIdOrTracking));
     }
 
     public List<OrderDto> getActiveOrders(String customerEmail) {
@@ -290,6 +330,12 @@ public class OrderService {
         dto.setEta(order.getEtaText());
         dto.setPickupAddress(order.getStreet());
         dto.setPhotosCount(order.getPhotos().size());
+
+        List<String> photoUrls = order.getPhotos().stream()
+                .map(p -> "/api/orders/" + order.getTrackingNumber() + "/photos/" + p.getSlotLabel().toLowerCase())
+                .toList();
+        dto.setPhotoUrls(photoUrls);
+
         dto.setProgressPercentage(order.getProgressPercentage());
 
         dto.setCustomerEmail(order.getCustomer().getEmail());
