@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 @Component
 public class DataInitializer implements CommandLineRunner {
@@ -112,7 +113,15 @@ public class DataInitializer implements CommandLineRunner {
 
         if (adminEmail != null && !adminEmail.isBlank() && adminPassword != null && !adminPassword.isBlank()) {
             String cleanEmail = adminEmail.trim().toLowerCase();
-            if (!userRepository.existsByEmail(cleanEmail)) {
+            Optional<UserEntity> existingAdmin = userRepository.findByEmail(cleanEmail);
+            if (existingAdmin.isPresent()) {
+                UserEntity admin = existingAdmin.get();
+                if (!passwordEncoder.matches(adminPassword.trim(), admin.getPassword())) {
+                    admin.setPassword(passwordEncoder.encode(adminPassword.trim()));
+                    userRepository.save(admin);
+                    log.info("Production admin password synced from ADMIN_PASSWORD env var for: {}", cleanEmail);
+                }
+            } else {
                 UserEntity admin = new UserEntity(
                         "Administrator",
                         cleanEmail,
