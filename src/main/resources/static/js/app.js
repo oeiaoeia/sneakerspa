@@ -51,6 +51,83 @@ const state = {
     likedReviews: {},
     activeTransformationIndex: 0,
   },
+  admin: {
+    activeTab: "orders", // "orders" | "reviews" | "support"
+    searchQuery: "",
+    statusFilter: "ALL",
+    viewingPhotoOrderId: null,
+    featuredReviews: { 1: true, 2: true },
+    adminReplies: {
+      1: "Thank you for trusting us with your Travis Scott 1s! Suede revival and sole de-yellowing are our specialties.",
+    },
+    supportTickets: [
+      {
+        id: "TCK-401",
+        customer: "Alex Johnson",
+        email: "alex@email.com",
+        orderId: "SNK-94821",
+        issue: "Requesting pickup time window adjustment to 4:00 PM - 5:00 PM due to client meeting.",
+        priority: "HIGH",
+        status: "OPEN",
+        time: "10 mins ago",
+      },
+      {
+        id: "TCK-402",
+        customer: "Marcus Vance",
+        email: "marcus@vance.com",
+        orderId: "SNK-88219",
+        issue: "Special care note: Vintage buttery suede on Jordan 1 Chicago 1985 requires chemical-free conditioning.",
+        priority: "MEDIUM",
+        status: "OPEN",
+        time: "25 mins ago",
+      },
+      {
+        id: "TCK-398",
+        customer: "Elena Rostova",
+        email: "elena@rostova.com",
+        orderId: "SNK-77102",
+        issue: "Doorman building delivery instructions: Package locker access code #8821.",
+        priority: "LOW",
+        status: "RESOLVED",
+        time: "2 hours ago",
+      },
+    ],
+    drivers: [
+      {
+        id: "DRV-1",
+        name: "Mike Ramirez",
+        vehicle: "Ford Transit Van #102",
+        zone: "Manhattan (Downtown & SoHo)",
+        status: "ON_ROUTE",
+        activeStops: 4,
+        completedToday: 9,
+        etaNext: "14 mins",
+        phone: "+1 (555) 234-5678",
+      },
+      {
+        id: "DRV-2",
+        name: "Sarah Jenkins",
+        vehicle: "Mercedes Sprinter #105",
+        zone: "Brooklyn (Williamsburg & DUMBO)",
+        status: "ON_ROUTE",
+        activeStops: 3,
+        completedToday: 11,
+        etaNext: "8 mins",
+        phone: "+1 (555) 876-5432",
+      },
+      {
+        id: "DRV-3",
+        name: "David Kim",
+        vehicle: "Cargo E-Bike Fleet #02",
+        zone: "Midtown Express & Rush Dispatch",
+        status: "AVAILABLE",
+        activeStops: 0,
+        completedToday: 7,
+        etaNext: "At Central Hub",
+        phone: "+1 (555) 345-6789",
+      },
+    ],
+  },
   showAuthModal: false,
   authModalTab: "login",
 };
@@ -169,6 +246,9 @@ window.addEventListener("hashchange", () => {
 
 window.addEventListener("auth-changed", async (e) => {
   if (e.detail.authenticated) {
+    if (e.detail.user) {
+      state.currentUser = e.detail.user;
+    }
     await fetchUserData();
   } else {
     state.currentUser = null;
@@ -181,34 +261,56 @@ window.addEventListener("auth-changed", async (e) => {
 });
 
 // ============================================================================
-// BOTTOM NAVIGATION COMPONENT (Exact BottomNav.tsx match)
+// BOTTOM & SIDEBAR NAVIGATION COMPONENTS
 // ============================================================================
 
 function renderBottomNav() {
-  const tabs = [
-    { icon: "home", label: "Home", path: "/home" },
-    { icon: "sparkles", label: "Services", path: "/services" },
-    { icon: "package", label: "Orders", path: "/orders" },
-    { icon: "user", label: "Profile", path: "/profile" },
+  const user = API.getUser() || state.currentUser;
+  const isAdmin = user && user.role === "ADMIN";
+
+  const customerTabs = [
+    { icon: "home", label: "Home", path: "/home", onclick: "navigate('/home')" },
+    { icon: "sparkles", label: "Services", path: "/services", onclick: "navigate('/services')" },
+    { icon: "package", label: "Orders", path: "/orders", onclick: "navigate('/orders')" },
+    { icon: "user", label: "Profile", path: "/profile", onclick: "navigate('/profile')" },
   ];
+
+  const adminTabs = [
+    { icon: "clipboard-list", label: "Orders", path: "/admin", tab: "orders", onclick: "setAdminTab('orders')" },
+    { icon: "star", label: "Reviews", path: "/admin", tab: "reviews", onclick: "setAdminTab('reviews')" },
+    { icon: "truck", label: "Support", path: "/admin", tab: "support", onclick: "setAdminTab('support')" },
+    { icon: "user", label: "Profile", path: "/profile", tab: null, onclick: "navigate('/profile')" },
+  ];
+
+  const tabs = isAdmin ? adminTabs : customerTabs;
 
   return `
     <!-- Floating Bottom Navigation (Mobile < 768px only) -->
     <nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-50 md:hidden">
       <div class="glass-card mx-4 mb-4 rounded-2xl px-2 py-3 flex justify-around items-center">
         ${tabs
-          .map(({ icon, label, path }) => {
-            const active = state.currentRoute === path;
+          .map((item) => {
+            let active = false;
+            if (isAdmin) {
+              if (item.path === "/admin") {
+                active = state.currentRoute === "/admin" && state.admin.activeTab === item.tab;
+              } else {
+                active = state.currentRoute === item.path;
+              }
+            } else {
+              active = state.currentRoute === item.path;
+            }
+
             return `
               <button
-                onclick="navigate('${path}')"
+                onclick="${item.onclick}"
                 class="flex flex-col items-center gap-1 transition-all duration-200"
               >
                 <div class="p-2 rounded-xl transition-all duration-200 ${active ? "bg-primary/20" : ""}">
-                  ${renderIcon(icon, `transition-colors ${active ? "text-primary" : "text-muted-foreground"}`, 20)}
+                  ${renderIcon(item.icon, `transition-colors ${active ? "text-primary" : "text-muted-foreground"}`, 20)}
                 </div>
                 <span class="text-[10px] font-medium ${active ? "text-primary" : "text-muted-foreground"}">
-                  ${label}
+                  ${item.label}
                 </span>
               </button>
             `;
@@ -228,100 +330,151 @@ function renderSidebar() {
     return ""; // No sidebar on Onboarding
   }
 
-  const tabs = [
-    { icon: "home", label: "Home", path: "/home" },
-    { icon: "sparkles", label: "Services", path: "/services" },
-    { icon: "package", label: "Orders", path: "/orders" },
-    { icon: "user", label: "Profile", path: "/profile" },
+  const user = API.getUser() || state.currentUser;
+  const isAdmin = user && user.role === "ADMIN";
+
+  const customerTabs = [
+    { icon: "home", label: "Home", path: "/home", onclick: "navigate('/home')" },
+    { icon: "sparkles", label: "Services", path: "/services", onclick: "navigate('/services')" },
+    { icon: "package", label: "Orders", path: "/orders", onclick: "navigate('/orders')" },
+    { icon: "user", label: "Profile", path: "/profile", onclick: "navigate('/profile')" },
   ];
-  const user = state.currentUser;
+
+  const adminTabs = [
+    { icon: "clipboard-list", label: "Live Orders", path: "/admin", tab: "orders", onclick: "setAdminTab('orders')" },
+    { icon: "star", label: "Customer Reviews", path: "/admin", tab: "reviews", onclick: "setAdminTab('reviews')" },
+    { icon: "truck", label: "Support & Dispatch", path: "/admin", tab: "support", onclick: "setAdminTab('support')" },
+    { icon: "user", label: "Staff Profile", path: "/profile", tab: null, onclick: "navigate('/profile')" },
+  ];
+
+  const tabs = isAdmin ? adminTabs : customerTabs;
 
   return `
     <aside class="hidden md:flex fixed inset-y-0 left-0 w-[260px] h-screen glass-card border-r border-border/80 flex-col justify-between z-40 p-5 select-none bg-background/90 backdrop-blur-xl">
       <!-- Top: Logo & Nav -->
       <div>
-        <div class="flex items-center gap-3 mb-8 cursor-pointer group" onclick="navigate('/home')">
+        <div class="flex items-center gap-3 mb-8 cursor-pointer group" onclick="navigate('${isAdmin ? "/admin" : "/home"}')">
           <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary group-hover:bg-primary/30 transition-colors shadow-sm shadow-primary/20">
-            ${renderIcon("sparkles", "text-primary", 20)}
+            ${renderIcon(isAdmin ? "shield-check" : "sparkles", "text-primary", 20)}
           </div>
           <div class="flex flex-col">
             <span class="font-display font-bold text-lg tracking-tight gradient-text leading-tight">Sneaker Spa</span>
-            <span class="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Premium Care</span>
+            <span class="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">${isAdmin ? "Operations Hub" : "Premium Care"}</span>
           </div>
         </div>
 
         <nav class="space-y-1.5">
           ${tabs
-            .map(({ icon, label, path }) => {
-              const active = currentRoute === path;
+            .map((item) => {
+              let active = false;
+              if (isAdmin) {
+                if (item.path === "/admin") {
+                  active = currentRoute === "/admin" && state.admin.activeTab === item.tab;
+                } else {
+                  active = currentRoute === item.path;
+                }
+              } else {
+                active = currentRoute === item.path;
+              }
+
+              let badgeHtml = "";
+              if (!isAdmin && item.label === "Orders" && state.activeOrderCount > 0) {
+                badgeHtml = `
+                  <span class="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
+                    ${state.activeOrderCount}
+                  </span>
+                `;
+              } else if (isAdmin && item.tab === "orders" && adminOrdersList.length > 0) {
+                const activeCount = adminOrdersList.filter(o => !["DELIVERED", "CANCELLED"].includes(o.rawStatus)).length;
+                badgeHtml = `
+                  <span class="px-1.5 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold">
+                    ${activeCount}
+                  </span>
+                `;
+              } else if (isAdmin && item.tab === "reviews") {
+                badgeHtml = `
+                  <span class="text-[10px] font-bold text-amber-400">
+                    4.9★
+                  </span>
+                `;
+              } else if (isAdmin && item.tab === "support") {
+                const openCount = state.admin.supportTickets.filter(t => t.status === "OPEN").length;
+                if (openCount > 0) {
+                  badgeHtml = `
+                    <span class="w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center">
+                      ${openCount}
+                    </span>
+                  `;
+                }
+              }
+
               return `
               <button
-                onclick="navigate('${path}')"
+                onclick="${item.onclick}"
                 class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                   active
                     ? "bg-primary/20 text-primary font-semibold shadow-sm shadow-primary/10"
                     : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
                 }"
               >
-                ${renderIcon(icon, active ? "text-primary" : "text-muted-foreground", 18)}
-                <span class="flex-1 text-left">${label}</span>
-                ${
-                  label === "Orders" && state.activeOrderCount > 0
-                    ? `
-                  <span class="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
-                    ${state.activeOrderCount}
-                  </span>
-                `
-                    : ""
-                }
+                ${renderIcon(item.icon, active ? "text-primary" : "text-muted-foreground", 18)}
+                <span class="flex-1 text-left">${item.label}</span>
+                ${badgeHtml}
               </button>
             `;
             })
             .join("")}
 
-          <!-- Book Cleaning primary button under nav items -->
-          <div class="pt-4">
-            <button
-              onclick="navigate('/booking')"
-              class="w-full gradient-btn py-3.5 px-4 rounded-xl font-display font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-md shadow-primary/20 hover:shadow-primary/30"
-            >
-              ${renderIcon("sparkles", "text-primary-foreground", 16)}
-              <span>Book Cleaning</span>
-            </button>
-          </div>
+          ${
+            !isAdmin
+              ? `
+            <!-- Book Cleaning primary button under nav items for Customers -->
+            <div class="pt-4">
+              <button
+                onclick="navigate('/booking')"
+                class="w-full gradient-btn py-3.5 px-4 rounded-xl font-display font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-md shadow-primary/20 hover:shadow-primary/30"
+              >
+                ${renderIcon("sparkles", "text-primary-foreground", 16)}
+                <span>Book Cleaning</span>
+              </button>
+            </div>
+          `
+              : `
+            <!-- Operations Status & Storefront Preview for Admins (No consumer buying buttons) -->
+            <div class="pt-4 space-y-2">
+              <div class="glass-card p-3 rounded-xl border border-primary/20 bg-primary/5 text-center">
+                <div class="flex items-center justify-center gap-2 text-xs font-semibold text-primary">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Operations Hub Live</span>
+                </div>
+                <p class="text-[10px] text-muted-foreground mt-0.5">Neon DB • Render Cloud</p>
+              </div>
+              <button
+                onclick="navigate('/home')"
+                class="w-full flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors py-2 px-3 rounded-xl hover:bg-secondary/60 border border-border/40"
+              >
+                ${renderIcon("external-link", "text-muted-foreground", 13)}
+                <span>View Customer Store</span>
+              </button>
+            </div>
+          `
+          }
         </nav>
       </div>
 
-      <!-- Bottom: User Card & Admin Link -->
+      <!-- Bottom: User Card -->
       <div class="pt-4 border-t border-border/60 space-y-2">
-        ${
-          user && user.role === "ADMIN"
-            ? `
-          <button
-            onclick="navigate('/admin')"
-            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
-              currentRoute === "/admin" ? "bg-primary/20 text-primary" : "text-primary hover:bg-primary/10"
-            }"
-          >
-            ${renderIcon("settings", "text-primary", 15)}
-            <span class="flex-1 text-left">Admin Console</span>
-            <span class="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold uppercase">Staff</span>
-          </button>
-        `
-            : ""
-        }
-
         ${
           user
             ? `
           <div onclick="navigate('/profile')" class="flex items-center gap-3 p-2 rounded-xl hover:bg-secondary/50 cursor-pointer transition-colors group">
             <div class="w-9 h-9 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-xs shrink-0 group-hover:bg-primary/30 transition-colors">
-              ${user.name ? user.name.charAt(0).toUpperCase() : "U"}
+              ${user.name ? user.name.charAt(0).toUpperCase() : (isAdmin ? "A" : "U")}
             </div>
             <div class="min-w-0 flex-1">
-              <p class="text-xs font-semibold truncate leading-tight group-hover:text-primary transition-colors">${user.name || "Customer"}</p>
+              <p class="text-xs font-semibold truncate leading-tight group-hover:text-primary transition-colors">${user.name || (isAdmin ? "Administrator" : "Customer")}</p>
               <p class="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
-                ${state.profile && state.profile.loyaltyPoints ? state.profile.loyaltyPoints.toLocaleString() : (user.loyaltyPoints ? user.loyaltyPoints.toLocaleString() : "1,250")} pts
+                ${isAdmin ? "Staff • Super Admin" : `${state.profile && state.profile.loyaltyPoints ? state.profile.loyaltyPoints.toLocaleString() : (user.loyaltyPoints ? user.loyaltyPoints.toLocaleString() : "1,250")} pts`}
               </p>
             </div>
             ${renderIcon("chevron-right", "text-muted-foreground/60 group-hover:text-foreground transition-colors shrink-0", 14)}
@@ -2333,7 +2486,8 @@ function reorderService(serviceName) {
 
 function renderProfile() {
   const p = state.profile;
-  const user = state.currentUser || { name: "Alex Johnson", email: "alex@email.com" };
+  const user = API.getUser() || state.currentUser || { name: "Alex Johnson", email: "alex@email.com", role: "CUSTOMER" };
+  const isAdmin = user && user.role === "ADMIN";
   const profileData = p.data || {
     loyaltyPoints: 1250,
     hasActiveSubscription: true,
@@ -2347,11 +2501,19 @@ function renderProfile() {
 
   const addresses = p.addresses || [];
 
-  const stats = [
+  const customerStats = [
     { label: "Total Orders", value: profileData.totalOrders || "12", icon: "sparkles" },
     { label: "Member Since", value: profileData.memberSince || "Jan '25", icon: "award" },
     { label: "Points", value: (profileData.loyaltyPoints || 1250).toLocaleString(), icon: "crown" },
   ];
+
+  const adminStats = [
+    { label: "Managed Orders", value: adminOrdersList.length || "24", icon: "clipboard-list" },
+    { label: "Staff Role", value: "Super Admin", icon: "shield" },
+    { label: "Satisfaction", value: "4.9 ★", icon: "star" },
+  ];
+
+  const stats = isAdmin ? adminStats : customerStats;
 
   return `
     <div class="w-full min-h-screen md:pl-[260px] pb-28 md:pb-12">
@@ -2387,14 +2549,14 @@ function renderProfile() {
           }
         </div>
 
-        <!-- 2 Columns on Desktop: User, Stats & Subscription on Left; Addresses & Settings on Right -->
+        <!-- 2 Columns on Desktop: User, Stats & Operations/Subscription on Left; Addresses & Settings on Right -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-          <!-- Left Column: User Card, Stats, Subscription -->
+          <!-- Left Column: User Card, Stats, Operations/Subscription -->
           <div class="space-y-6">
             <!-- User Card -->
             <div class="glass-card rounded-2xl p-5 flex items-center gap-4">
               <div class="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center relative">
-                ${renderIcon("user", "text-primary", 28)}
+                ${renderIcon(isAdmin ? "shield-check" : "user", "text-primary", 28)}
                 ${
                   p.isEditing
                     ? `
@@ -2425,9 +2587,9 @@ function renderProfile() {
                     : `
                   <h2 class="font-display font-semibold text-lg">${user.name}</h2>
                   <p class="text-sm text-muted-foreground">${user.email}</p>
-                  <div class="flex items-center gap-1 mt-1">
-                    ${renderIcon("crown", "text-primary", 12)}
-                    <span class="text-xs text-primary font-medium">Premium Member</span>
+                  <div class="flex items-center gap-1.5 mt-1">
+                    ${renderIcon(isAdmin ? "shield-check" : "crown", "text-primary", 13)}
+                    <span class="text-xs text-primary font-medium">${isAdmin ? "Super Administrator (Staff)" : "Premium Member"}</span>
                   </div>
                 `
                 }
@@ -2449,32 +2611,90 @@ function renderProfile() {
                 .join("")}
             </div>
 
-            <!-- Subscription Card -->
-            <div class="glass-card rounded-2xl p-5 border-primary/20 space-y-3">
-              <div class="flex justify-between items-center">
-                <div>
-                  <p class="font-display font-semibold text-sm">Monthly Plan</p>
-                  <p class="text-xs text-muted-foreground">Next billing: ${profileData.subscriptionNextBilling || "Apr 15, 2026"}</p>
+            ${
+              !isAdmin
+                ? `
+              <!-- Subscription Card for Customers -->
+              <div class="glass-card rounded-2xl p-5 border-primary/20 space-y-3">
+                <div class="flex justify-between items-center">
+                  <div>
+                    <p class="font-display font-semibold text-sm">Monthly Plan</p>
+                    <p class="text-xs text-muted-foreground">Next billing: ${profileData.subscriptionNextBilling || "Apr 15, 2026"}</p>
+                  </div>
+                  <span class="text-lg font-display font-bold gradient-text">$29/mo</span>
                 </div>
-                <span class="text-lg font-display font-bold gradient-text">$29/mo</span>
+                <div class="flex gap-2">
+                  <div class="flex-1 bg-secondary rounded-xl p-3 text-center">
+                    <p class="text-lg font-display font-bold">${profileData.cleaningsLeft || 1}</p>
+                    <p class="text-[10px] text-muted-foreground">Cleanings Left</p>
+                  </div>
+                  <div class="flex-1 bg-secondary rounded-xl p-3 text-center">
+                    <p class="text-lg font-display font-bold">20%</p>
+                    <p class="text-[10px] text-muted-foreground">Discount</p>
+                  </div>
+                </div>
+                <button
+                  onclick="subscribeMonthlyPlan()"
+                  class="w-full glass-card py-2.5 rounded-xl text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                >
+                  Manage Subscription
+                </button>
               </div>
-              <div class="flex gap-2">
-                <div class="flex-1 bg-secondary rounded-xl p-3 text-center">
-                  <p class="text-lg font-display font-bold">${profileData.cleaningsLeft || 1}</p>
-                  <p class="text-[10px] text-muted-foreground">Cleanings Left</p>
+            `
+                : `
+              <!-- Operations Command Center Quick Access for Admins (Zero Buying Options) -->
+              <div class="glass-card rounded-2xl p-5 border-primary/20 space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-display font-semibold text-sm">Admin Operations Console</p>
+                    <p class="text-xs text-muted-foreground">Live Cloud Production • Neon DB Connected</p>
+                  </div>
+                  <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 font-bold uppercase tracking-wider">Active</span>
                 </div>
-                <div class="flex-1 bg-secondary rounded-xl p-3 text-center">
-                  <p class="text-lg font-display font-bold">20%</p>
-                  <p class="text-[10px] text-muted-foreground">Discount</p>
+
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    onclick="setAdminTab('orders')"
+                    class="glass-card p-3 rounded-xl hover:border-primary/40 flex items-center gap-2.5 transition-all text-left"
+                  >
+                    ${renderIcon("clipboard-list", "text-primary shrink-0", 16)}
+                    <div>
+                      <p class="font-semibold text-foreground">Live Orders</p>
+                      <p class="text-[10px] text-muted-foreground">Status & tracking</p>
+                    </div>
+                  </button>
+                  <button
+                    onclick="setAdminTab('reviews')"
+                    class="glass-card p-3 rounded-xl hover:border-primary/40 flex items-center gap-2.5 transition-all text-left"
+                  >
+                    ${renderIcon("star", "text-amber-400 shrink-0", 16)}
+                    <div>
+                      <p class="font-semibold text-foreground">Reviews QA</p>
+                      <p class="text-[10px] text-muted-foreground">Moderation & replies</p>
+                    </div>
+                  </button>
+                  <button
+                    onclick="setAdminTab('support')"
+                    class="glass-card p-3 rounded-xl hover:border-primary/40 flex items-center gap-2.5 transition-all text-left col-span-2"
+                  >
+                    ${renderIcon("truck", "text-primary shrink-0", 16)}
+                    <div>
+                      <p class="font-semibold text-foreground">Support & Fleet Dispatch</p>
+                      <p class="text-[10px] text-muted-foreground">Courier routes & customer tickets</p>
+                    </div>
+                  </button>
                 </div>
+
+                <button
+                  onclick="navigate('/admin')"
+                  class="w-full gradient-btn py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
+                >
+                  ${renderIcon("shield-check", "text-primary-foreground", 14)}
+                  <span>Open Operations Dashboard</span>
+                </button>
               </div>
-              <button
-                onclick="subscribeMonthlyPlan()"
-                class="w-full glass-card py-2.5 rounded-xl text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-              >
-                Manage Subscription
-              </button>
-            </div>
+            `
+            }
           </div>
 
           <!-- Right Column: Saved Addresses, Settings List, Sign Out -->
@@ -2765,19 +2985,23 @@ function renderNotFound() {
 }
 
 // ============================================================================
-// SCREEN 8: ADMIN DASHBOARD (#/admin)
+// SCREEN 8: ADMIN OPERATIONS DASHBOARD (#/admin)
 // ============================================================================
 
 let adminOrdersList = [];
 
 async function renderAdmin() {
-  const user = state.currentUser;
+  const user = API.getUser() || state.currentUser;
+  if (user) state.currentUser = user;
   if (!user || user.role !== "ADMIN") {
     return `
       <div class="w-full min-h-screen md:pl-[260px] pb-28 md:pb-12 flex items-center justify-center">
         <div class="max-w-md mx-auto px-5 text-center space-y-4">
+          <div class="w-14 h-14 rounded-2xl bg-destructive/20 text-destructive flex items-center justify-center mx-auto">
+            ${renderIcon("shield-alert", "text-destructive", 28)}
+          </div>
           <h2 class="text-xl font-display font-bold text-destructive">Admin Access Required</h2>
-          <p class="text-sm text-muted-foreground">You must be logged in as an administrator to manage orders.</p>
+          <p class="text-xs text-muted-foreground">You must be logged in as an administrator to access the Operations Dashboard.</p>
           <button onclick="openAuthModal('login')" class="gradient-btn px-6 py-2.5 rounded-xl text-xs font-semibold">
             Login as Admin
           </button>
@@ -2787,164 +3011,934 @@ async function renderAdmin() {
     `;
   }
 
+  // Fetch admin orders and ensure reviews are loaded
   try {
     adminOrdersList = await API.getAdminOrders();
   } catch {
-    adminOrdersList = [];
+    if (!adminOrdersList) {
+      adminOrdersList = [];
+    }
   }
 
-  const statuses = ["PLACED", "PICKUP_SCHEDULED", "PICKED_UP", "CLEANING", "QUALITY_CHECK", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
+  if (!state.reviews || state.reviews.length === 0) {
+    try {
+      state.reviews = await API.getReviews();
+    } catch {
+      state.reviews = [];
+    }
+  }
+
+  // Calculate Operational KPIs
+  const totalOrders = adminOrdersList.length;
+  let totalRevenue = 0;
+  let activeQueue = 0;
+  for (const o of adminOrdersList) {
+    const rawVal = parseFloat((o.price || "$0").replace(/[^0-9.]/g, "")) || 0;
+    totalRevenue += rawVal;
+    if (!["DELIVERED", "CANCELLED"].includes(o.rawStatus)) {
+      activeQueue++;
+    }
+  }
+  const avgSatisfaction = 4.9;
+  const openTicketsCount = state.admin.supportTickets.filter((t) => t.status === "OPEN").length;
+  const currentTab = state.admin.activeTab || "orders";
 
   return `
     <div class="w-full min-h-screen md:pl-[260px] pb-28 md:pb-12">
       <div class="max-w-md md:max-w-[1100px] mx-auto px-5 md:px-8 pt-8 md:pt-10 space-y-6">
-        <div class="flex justify-between items-center">
+        
+        <!-- Header & Top Actions -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 class="text-2xl md:text-3xl font-display font-bold">Admin Console</h1>
-            <p class="text-xs text-muted-foreground mt-0.5">Manage live orders and status progression</p>
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                Operations Live
+              </span>
+              <span class="text-[11px] text-muted-foreground">• Neon Cloud DB</span>
+            </div>
+            <h1 class="text-2xl md:text-3xl font-display font-bold mt-1">Operations Dashboard</h1>
+            <p class="text-xs text-muted-foreground mt-0.5">Real-time order fulfillment, customer reviews moderation, and courier fleet dispatch.</p>
           </div>
-          <button onclick="navigate('/profile')" class="text-xs text-primary font-medium hover:underline">
-            Back to App
+
+          <div class="flex items-center gap-2.5 self-start md:self-auto">
+            <button
+              onclick="refreshAdminDashboard()"
+              class="glass-card hover:border-primary/40 px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-2 text-foreground/80 hover:text-primary transition-all active:scale-[0.98]"
+            >
+              ${renderIcon("refresh-cw", "text-primary", 14)}
+              <span>Sync Cloud</span>
+            </button>
+            <button
+              onclick="navigate('/home')"
+              class="glass-card hover:border-primary/40 px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-2 text-foreground/80 hover:text-primary transition-all active:scale-[0.98]"
+            >
+              ${renderIcon("external-link", "text-muted-foreground", 14)}
+              <span>Storefront</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 Top KPI Metric Cards (No consumer sales options) -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 md:gap-4">
+          <!-- KPI 1: Orders -->
+          <div class="glass-card rounded-2xl p-4 space-y-1 relative overflow-hidden group hover:border-primary/40 transition-all">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Total Orders</span>
+              <div class="w-8 h-8 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
+                ${renderIcon("clipboard-list", "text-primary", 16)}
+              </div>
+            </div>
+            <p class="text-2xl font-display font-bold">${totalOrders}</p>
+            <p class="text-[11px] text-muted-foreground">All customer bookings</p>
+          </div>
+
+          <!-- KPI 2: Gross Revenue -->
+          <div class="glass-card rounded-2xl p-4 space-y-1 relative overflow-hidden group hover:border-primary/40 transition-all">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Gross Revenue</span>
+              <div class="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                ${renderIcon("dollar-sign", "text-emerald-400", 16)}
+              </div>
+            </div>
+            <p class="text-2xl font-display font-bold gradient-text">$${totalRevenue.toFixed(2)}</p>
+            <p class="text-[11px] text-emerald-400/90 font-medium">Synced from Database</p>
+          </div>
+
+          <!-- KPI 3: In-Flight Queue -->
+          <div class="glass-card rounded-2xl p-4 space-y-1 relative overflow-hidden group hover:border-primary/40 transition-all">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Active Queue</span>
+              <div class="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400">
+                ${renderIcon("clock", "text-amber-400", 16)}
+              </div>
+            </div>
+            <p class="text-2xl font-display font-bold">${activeQueue}</p>
+            <p class="text-[11px] text-amber-400/90 font-medium">In cleaning or transit</p>
+          </div>
+
+          <!-- KPI 4: Customer Satisfaction -->
+          <div class="glass-card rounded-2xl p-4 space-y-1 relative overflow-hidden group hover:border-primary/40 transition-all">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Satisfaction</span>
+              <div class="w-8 h-8 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
+                ${renderIcon("star", "text-amber-400", 16)}
+              </div>
+            </div>
+            <p class="text-2xl font-display font-bold text-amber-400">${avgSatisfaction} ★</p>
+            <p class="text-[11px] text-muted-foreground">${state.reviews.length || 18} verified reviews</p>
+          </div>
+        </div>
+
+        <!-- 3 Operational Tabs Switcher -->
+        <div class="glass-card p-1.5 rounded-2xl flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          <button
+            onclick="setAdminTab('orders')"
+            class="flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all ${
+              currentTab === "orders"
+                ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+            }"
+          >
+            ${renderIcon("clipboard-list", currentTab === "orders" ? "text-primary-foreground" : "text-muted-foreground", 16)}
+            <span>Customer Orders</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-full ${currentTab === "orders" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-secondary text-muted-foreground"}">${totalOrders}</span>
+          </button>
+
+          <button
+            onclick="setAdminTab('reviews')"
+            class="flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all ${
+              currentTab === "reviews"
+                ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+            }"
+          >
+            ${renderIcon("star", currentTab === "reviews" ? "text-primary-foreground" : "text-muted-foreground", 16)}
+            <span>Customer Reviews</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-full ${currentTab === "reviews" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-secondary text-muted-foreground"}">${state.reviews.length}</span>
+          </button>
+
+          <button
+            onclick="setAdminTab('support')"
+            class="flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all ${
+              currentTab === "support"
+                ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+            }"
+          >
+            ${renderIcon("truck", currentTab === "support" ? "text-primary-foreground" : "text-muted-foreground", 16)}
+            <span>Support & Dispatch</span>
+            ${
+              openTicketsCount > 0
+                ? `<span class="text-[10px] px-1.5 py-0.2 rounded-full ${currentTab === "support" ? "bg-destructive text-destructive-foreground" : "bg-destructive/20 text-destructive font-bold"}">${openTicketsCount}</span>`
+                : ""
+            }
           </button>
         </div>
 
+        <!-- TAB CONTENT -->
         ${
-          adminOrdersList.length === 0
-            ? `<div class="glass-card rounded-2xl p-6 text-center text-xs text-muted-foreground">No orders in database.</div>`
-            : `
-          <!-- Mobile Card Layout (<768px) -->
-          <div class="space-y-4 md:hidden">
-            ${adminOrdersList
-              .map(
-                (order) => `
-              <div class="glass-card rounded-2xl p-4 space-y-3">
-                <div class="flex justify-between items-start">
-                  <div>
-                    <p class="font-display font-bold text-sm">#${order.id}</p>
-                    <p class="text-xs font-medium text-foreground/90">${order.service}</p>
-                    <p class="text-[10px] text-muted-foreground">${order.customerName} (${order.customerEmail})</p>
+          currentTab === "orders"
+            ? renderAdminOrdersTab()
+            : currentTab === "reviews"
+            ? renderAdminReviewsTab()
+            : renderAdminSupportTab()
+        }
+
+      </div>
+
+      <!-- Photo Condition Modal -->
+      ${renderAdminPhotoModal()}
+
+      ${renderBottomNav()}
+    </div>
+  `;
+}
+
+function getStatusBadgeClass(status) {
+  switch (status) {
+    case "DELIVERED":
+      return "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+    case "CANCELLED":
+      return "bg-destructive/20 text-destructive border border-destructive/30";
+    case "CLEANING":
+      return "bg-primary/20 text-primary border border-primary/30";
+    case "QUALITY_CHECK":
+      return "bg-purple-500/20 text-purple-400 border border-purple-500/30";
+    case "OUT_FOR_DELIVERY":
+      return "bg-amber-500/20 text-amber-400 border border-amber-500/30";
+    case "PICKED_UP":
+    case "PICKUP_SCHEDULED":
+      return "bg-sky-500/20 text-sky-400 border border-sky-500/30";
+    default:
+      return "bg-primary/20 text-primary border border-primary/30";
+  }
+}
+
+function renderAdminOrdersTab() {
+  const statuses = ["PLACED", "PICKUP_SCHEDULED", "PICKED_UP", "CLEANING", "QUALITY_CHECK", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
+
+  const q = (state.admin.searchQuery || "").trim().toLowerCase();
+  const f = state.admin.statusFilter || "ALL";
+
+  const filteredOrders = adminOrdersList.filter((order) => {
+    const matchQ =
+      !q ||
+      (order.id && order.id.toLowerCase().includes(q)) ||
+      (order.customerName && order.customerName.toLowerCase().includes(q)) ||
+      (order.customerEmail && order.customerEmail.toLowerCase().includes(q)) ||
+      (order.service && order.service.toLowerCase().includes(q));
+
+    if (!matchQ) return false;
+
+    if (f === "ACTIVE") return !["DELIVERED", "CANCELLED"].includes(order.rawStatus);
+    if (f === "CLEANING") return order.rawStatus === "CLEANING";
+    if (f === "DELIVERY") return ["OUT_FOR_DELIVERY", "DELIVERED"].includes(order.rawStatus);
+    if (f === "DELIVERED") return order.rawStatus === "DELIVERED";
+    return true;
+  });
+
+  return `
+    <div class="space-y-4">
+      <!-- Search & Status Filter Chips -->
+      <div class="glass-card rounded-2xl p-4 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+        <!-- Search Input -->
+        <div class="relative flex-1">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            ${renderIcon("search", "text-muted-foreground", 16)}
+          </div>
+          <input
+            type="text"
+            value="${state.admin.searchQuery || ""}"
+            oninput="setAdminSearchQuery(this.value)"
+            placeholder="Search by order #, customer name, email, or service..."
+            class="w-full bg-secondary text-xs rounded-xl pl-9 pr-8 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/60"
+          />
+          ${
+            state.admin.searchQuery
+              ? `
+            <button onclick="setAdminSearchQuery('')" class="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground">
+              ${renderIcon("x", "text-muted-foreground", 14)}
+            </button>
+          `
+              : ""
+          }
+        </div>
+
+        <!-- Filter Chips -->
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+          ${[
+            { id: "ALL", label: `All (${adminOrdersList.length})` },
+            { id: "ACTIVE", label: "Active Queue" },
+            { id: "CLEANING", label: "Cleaning" },
+            { id: "DELIVERY", label: "Transit" },
+            { id: "DELIVERED", label: "Delivered" },
+          ]
+            .map(
+              (chip) => `
+            <button
+              onclick="setAdminStatusFilter('${chip.id}')"
+              class="px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 ${
+                f === chip.id
+                  ? "bg-primary text-primary-foreground font-semibold shadow-sm shadow-primary/20"
+                  : "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80"
+              }"
+            >
+              ${chip.label}
+            </button>
+          `
+            )
+            .join("")}
+        </div>
+      </div>
+
+      <!-- Order List or Table -->
+      ${
+        filteredOrders.length === 0
+          ? `
+        <div class="glass-card rounded-2xl p-10 text-center space-y-3">
+          <div class="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center mx-auto text-muted-foreground">
+            ${renderIcon("inbox", "text-muted-foreground", 24)}
+          </div>
+          <h3 class="font-display font-semibold text-sm">No Orders Found</h3>
+          <p class="text-xs text-muted-foreground">No orders match the current search query or filter criteria.</p>
+          <button onclick="setAdminSearchQuery(''); setAdminStatusFilter('ALL');" class="text-xs text-primary font-semibold hover:underline">
+            Reset Filters
+          </button>
+        </div>
+      `
+          : `
+        <!-- Mobile Card Layout (< 768px) -->
+        <div class="space-y-4 md:hidden">
+          ${filteredOrders
+            .map(
+              (order) => `
+            <div class="glass-card rounded-2xl p-4 space-y-3">
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="font-display font-bold text-sm">#${order.id}</p>
+                  <p class="text-xs font-semibold text-foreground">${order.service}</p>
+                  <p class="text-[11px] text-muted-foreground">${order.customerName || "Customer"} • ${order.customerEmail || ""}</p>
+                </div>
+                <span class="text-xs px-2.5 py-1 rounded-full ${getStatusBadgeClass(order.rawStatus)} font-medium">
+                  ${order.status}
+                </span>
+              </div>
+
+              <!-- Details & Photos -->
+              <div class="text-xs text-muted-foreground bg-secondary/50 p-2.5 rounded-xl space-y-1.5">
+                <p class="flex items-center gap-1.5">
+                  ${renderIcon("map-pin", "text-primary shrink-0", 13)}
+                  <span class="text-foreground truncate">${order.pickupAddress}</span>
+                </p>
+                <div class="flex justify-between items-center text-[11px]">
+                  <span>Total: <strong class="text-foreground">${order.price}</strong></span>
+                  <span>${order.date} • ${order.scheduledTime || ""}</span>
+                </div>
+                ${
+                  order.photoUrls && order.photoUrls.length > 0
+                    ? `
+                  <div class="pt-1.5 border-t border-border/40 flex items-center justify-between">
+                    <span class="text-[11px] text-primary flex items-center gap-1 font-medium">
+                      ${renderIcon("camera", "text-primary", 12)} ${order.photoUrls.length} Condition Photo(s)
+                    </span>
+                    <button
+                      onclick="openOrderPhotosModal('${order.id}')"
+                      class="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-md font-semibold hover:bg-primary/30"
+                    >
+                      View Photos
+                    </button>
                   </div>
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary font-medium">
-                    ${order.status}
+                `
+                    : ""
+                }
+              </div>
+
+              <!-- Status Update Controls -->
+              <div class="space-y-2 pt-1 border-t border-border">
+                <div class="flex items-center gap-2">
+                  <select id="status-select-${order.id}" class="flex-1 bg-secondary text-xs rounded-lg px-2.5 py-2 border border-border focus:ring-1 focus:ring-primary focus:outline-none">
+                    ${statuses
+                      .map(
+                        (s) => `
+                      <option value="${s}" ${order.rawStatus === s ? "selected" : ""}>${s}</option>
+                    `
+                      )
+                      .join("")}
+                  </select>
+                  <button
+                    onclick="advanceOrderStatus('${order.id}')"
+                    class="gradient-btn px-4 py-2 rounded-lg text-xs font-semibold"
+                  >
+                    Update
+                  </button>
+                </div>
+                <input
+                  id="status-notes-${order.id}"
+                  type="text"
+                  placeholder="Optional timeline note (e.g. Sole iced, awaiting courier)..."
+                  class="w-full bg-secondary text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/60"
+                />
+              </div>
+            </div>
+          `
+            )
+            .join("")}
+        </div>
+
+        <!-- Desktop Full-Width Table Layout (>= 768px) -->
+        <div class="hidden md:block glass-card rounded-2xl overflow-hidden border border-border">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-secondary/70 border-b border-border text-muted-foreground font-semibold uppercase tracking-wider">
+                <tr>
+                  <th class="py-3.5 px-4">Order #</th>
+                  <th class="py-3.5 px-4">Customer</th>
+                  <th class="py-3.5 px-4">Service & Photos</th>
+                  <th class="py-3.5 px-4">Total</th>
+                  <th class="py-3.5 px-4">Scheduled</th>
+                  <th class="py-3.5 px-4">Pickup Address</th>
+                  <th class="py-3.5 px-4">Status</th>
+                  <th class="py-3.5 px-4 min-w-[260px]">Update Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border/60">
+                ${filteredOrders
+                  .map(
+                    (order) => `
+                  <tr class="hover:bg-secondary/30 transition-colors">
+                    <td class="py-3.5 px-4 font-mono font-bold text-foreground">
+                      #${order.id}
+                    </td>
+                    <td class="py-3.5 px-4">
+                      <p class="font-medium text-foreground">${order.customerName || "Customer"}</p>
+                      <p class="text-[11px] text-muted-foreground">${order.customerEmail || ""}</p>
+                    </td>
+                    <td class="py-3.5 px-4">
+                      <p class="font-medium text-foreground">${order.service}</p>
+                      ${
+                        order.photoUrls && order.photoUrls.length > 0
+                          ? `
+                        <button
+                          onclick="openOrderPhotosModal('${order.id}')"
+                          class="mt-1 inline-flex items-center gap-1 text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded font-medium hover:bg-primary/30 transition-colors"
+                        >
+                          ${renderIcon("camera", "text-primary", 11)} ${order.photoUrls.length} Photos
+                        </button>
+                      `
+                          : ""
+                      }
+                    </td>
+                    <td class="py-3.5 px-4 font-display font-bold gradient-text">${order.price}</td>
+                    <td class="py-3.5 px-4 text-muted-foreground">
+                      <p class="text-foreground font-medium">${order.date}</p>
+                      <p class="text-[10px]">${order.scheduledTime || ""}</p>
+                    </td>
+                    <td class="py-3.5 px-4 text-muted-foreground max-w-[160px] truncate" title="${order.pickupAddress}">
+                      ${order.pickupAddress}
+                    </td>
+                    <td class="py-3.5 px-4">
+                      <span class="inline-block px-2.5 py-1 rounded-full text-[11px] font-medium ${getStatusBadgeClass(order.rawStatus)}">
+                        ${order.status}
+                      </span>
+                    </td>
+                    <td class="py-3.5 px-4">
+                      <div class="flex items-center gap-2">
+                        <select id="status-select-table-${order.id}" class="bg-secondary text-xs rounded-lg px-2.5 py-1.5 border border-border focus:ring-1 focus:ring-primary focus:outline-none">
+                          ${statuses
+                            .map(
+                              (s) => `
+                            <option value="${s}" ${order.rawStatus === s ? "selected" : ""}>${s}</option>
+                          `
+                            )
+                            .join("")}
+                        </select>
+                        <button
+                          onclick="advanceOrderStatus('${order.id}')"
+                          class="gradient-btn px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0"
+                        >
+                          Update
+                        </button>
+                      </div>
+                      <input
+                        id="status-notes-table-${order.id}"
+                        type="text"
+                        placeholder="Timeline note (e.g. Sole sanitized)..."
+                        class="w-full mt-1.5 bg-secondary text-[11px] rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/60"
+                      />
+                    </td>
+                  </tr>
+                `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `
+      }
+    </div>
+  `;
+}
+
+function renderAdminReviewsTab() {
+  const reviews = state.reviews || [];
+
+  return `
+    <div class="space-y-6">
+      <!-- Reviews Analytics Summary Card -->
+      <div class="glass-card rounded-2xl p-5 md:p-6 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+        <!-- Score -->
+        <div class="text-center md:text-left space-y-1">
+          <p class="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Overall Satisfaction</p>
+          <div class="flex items-center justify-center md:justify-start gap-2">
+            <span class="text-4xl font-display font-bold text-amber-400">4.9</span>
+            <div class="flex text-amber-400">
+              ${[1, 2, 3, 4, 5].map(() => renderIcon("star", "text-amber-400 fill-amber-400", 18)).join("")}
+            </div>
+          </div>
+          <p class="text-xs text-muted-foreground">Based on ${reviews.length || 18} authenticated sneaker cleanings</p>
+        </div>
+
+        <!-- Rating Distribution -->
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2 text-xs">
+            <span class="w-10 text-muted-foreground font-medium">5 Star</span>
+            <div class="flex-1 bg-secondary rounded-full h-2 overflow-hidden">
+              <div class="bg-primary h-full rounded-full" style="width: 92%"></div>
+            </div>
+            <span class="w-8 text-right text-foreground font-semibold">92%</span>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <span class="w-10 text-muted-foreground font-medium">4 Star</span>
+            <div class="flex-1 bg-secondary rounded-full h-2 overflow-hidden">
+              <div class="bg-primary/60 h-full rounded-full" style="width: 6%"></div>
+            </div>
+            <span class="w-8 text-right text-foreground font-semibold">6%</span>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <span class="w-10 text-muted-foreground font-medium">3 Star</span>
+            <div class="flex-1 bg-secondary rounded-full h-2 overflow-hidden">
+              <div class="bg-amber-400 h-full rounded-full" style="width: 2%"></div>
+            </div>
+            <span class="w-8 text-right text-foreground font-semibold">2%</span>
+          </div>
+        </div>
+
+        <!-- QA Policy Badge -->
+        <div class="bg-secondary/60 rounded-xl p-4 border border-border/80 space-y-1.5 text-xs">
+          <div class="flex items-center gap-2 text-primary font-semibold">
+            ${renderIcon("award", "text-primary", 16)}
+            <span>Master Cobbler Guarantee</span>
+          </div>
+          <p class="text-muted-foreground text-[11px] leading-relaxed">
+            All reviews originate from real orders verified by our workshop. Negative reports trigger instant courier dispatch inspection.
+          </p>
+        </div>
+      </div>
+
+      <!-- Reviews Moderation & Feedback Stream -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-display font-semibold text-base md:text-lg">Customer Feedback & QA Moderation</h2>
+          <span class="text-xs text-muted-foreground">${reviews.length} Total Submissions</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          ${reviews
+            .map((review) => {
+              const isFeatured = !!state.admin.featuredReviews[review.id];
+              const reply = state.admin.adminReplies[review.id];
+
+              return `
+              <div class="glass-card rounded-2xl p-5 space-y-3.5 flex flex-col justify-between hover:border-primary/40 transition-all ${
+                isFeatured ? "border-primary/40 bg-primary/5" : ""
+              }">
+                <div class="space-y-3">
+                  <!-- Header: Customer & Stars -->
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="flex items-center gap-3">
+                      <div class="w-9 h-9 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-xs">
+                        ${review.name ? review.name.charAt(0).toUpperCase() : "C"}
+                      </div>
+                      <div>
+                        <div class="flex items-center gap-1.5">
+                          <p class="text-xs font-semibold text-foreground">${review.name}</p>
+                          <span class="text-[9px] bg-primary/20 text-primary px-1.5 py-0.2 rounded-full font-semibold">Verified</span>
+                        </div>
+                        <p class="text-[10px] text-muted-foreground">${review.time || "Recent order"}</p>
+                      </div>
+                    </div>
+
+                    <!-- Stars -->
+                    <div class="flex text-amber-400">
+                      ${[...Array(review.rating || 5)].map(() => renderIcon("star", "text-amber-400 fill-amber-400", 13)).join("")}
+                    </div>
+                  </div>
+
+                  <!-- Text -->
+                  <p class="text-xs text-foreground/90 leading-relaxed italic">
+                    "${review.text}"
+                  </p>
+
+                  <!-- Helpful Count -->
+                  <div class="flex items-center gap-3 text-[11px] text-muted-foreground">
+                    <span class="flex items-center gap-1">
+                      ${renderIcon("thumbs-up", "text-primary", 12)}
+                      <span>${review.helpfulCount || 0} helpful votes</span>
+                    </span>
+                    ${
+                      isFeatured
+                        ? `<span class="text-primary font-semibold flex items-center gap-1">${renderIcon("sparkles", "text-primary", 12)} Pinned on Storefront</span>`
+                        : ""
+                    }
+                  </div>
+
+                  <!-- Official Staff Reply if exists -->
+                  ${
+                    reply
+                      ? `
+                    <div class="p-3 rounded-xl bg-secondary/80 border border-primary/20 space-y-1">
+                      <div class="flex items-center gap-1.5 text-[10px] font-bold text-primary uppercase tracking-wider">
+                        ${renderIcon("shield-check", "text-primary", 12)}
+                        <span>Official Spa Response</span>
+                      </div>
+                      <p class="text-xs text-muted-foreground leading-relaxed">
+                        "${reply}"
+                      </p>
+                    </div>
+                  `
+                      : ""
+                  }
+                </div>
+
+                <!-- Admin Action Toolbar -->
+                <div class="pt-3 border-t border-border/60 flex flex-col gap-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <button
+                      onclick="toggleFeaturedReview(${review.id})"
+                      class="px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
+                        isFeatured
+                          ? "bg-primary/20 text-primary font-semibold border border-primary/30"
+                          : "glass-card text-muted-foreground hover:text-foreground"
+                      }"
+                    >
+                      ${renderIcon("star", isFeatured ? "text-primary fill-primary" : "text-muted-foreground", 13)}
+                      <span>${isFeatured ? "Featured" : "Feature on Store"}</span>
+                    </button>
+                    <span class="text-[10px] text-muted-foreground">ID: REV-${review.id}</span>
+                  </div>
+
+                  <!-- Reply Box if no reply yet -->
+                  ${
+                    !reply
+                      ? `
+                    <div class="flex items-center gap-1.5 mt-1">
+                      <input
+                        id="admin-reply-input-${review.id}"
+                        type="text"
+                        placeholder="Post official staff reply..."
+                        class="flex-1 bg-secondary text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/60"
+                      />
+                      <button
+                        onclick="submitAdminReviewReply(${review.id})"
+                        class="gradient-btn px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0"
+                      >
+                        Reply
+                      </button>
+                    </div>
+                  `
+                      : ""
+                  }
+                </div>
+              </div>
+            `;
+            })
+            .join("")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminSupportTab() {
+  const tickets = state.admin.supportTickets || [];
+  const drivers = state.admin.drivers || [];
+
+  return `
+    <div class="space-y-6">
+      <!-- 2 Operational Columns: Dispatch Fleet & Support Tickets -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        
+        <!-- Column 1: Courier Dispatch Fleet -->
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="font-display font-semibold text-base md:text-lg">Courier Fleet & Dispatch</h2>
+              <p class="text-xs text-muted-foreground">Live courier vehicle tracking and active route load</p>
+            </div>
+            <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 font-bold uppercase tracking-wider">
+              3 Drivers Active
+            </span>
+          </div>
+
+          <div class="space-y-3">
+            ${drivers
+              .map(
+                (driver) => `
+              <div class="glass-card rounded-2xl p-4 space-y-3 hover:border-primary/40 transition-all">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
+                      ${renderIcon("truck", "text-primary", 20)}
+                    </div>
+                    <div>
+                      <p class="font-display font-bold text-sm text-foreground">${driver.name}</p>
+                      <p class="text-xs text-muted-foreground">${driver.vehicle}</p>
+                    </div>
+                  </div>
+                  <span class="text-[11px] px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5 ${
+                    driver.status === "ON_ROUTE"
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                      : "bg-primary/20 text-primary border border-primary/30"
+                  }">
+                    <span class="w-1.5 h-1.5 rounded-full ${driver.status === "ON_ROUTE" ? "bg-emerald-400 animate-pulse" : "bg-primary"}"></span>
+                    ${driver.status === "ON_ROUTE" ? "On Route" : "Available"}
                   </span>
                 </div>
 
-                <div class="text-xs text-muted-foreground bg-secondary/50 p-2.5 rounded-xl space-y-1">
-                  <p>Address: <span class="text-foreground">${order.pickupAddress}</span></p>
-                  <p>Total: <span class="text-foreground font-semibold">${order.price}</span> (Subtotal: ${order.subtotal})</p>
-                  <p>Scheduled: <span class="text-foreground">${order.date} • ${order.scheduledTime}</span></p>
+                <!-- Route Stats -->
+                <div class="grid grid-cols-3 gap-2 bg-secondary/50 p-2.5 rounded-xl text-center text-xs">
+                  <div>
+                    <p class="font-display font-bold text-foreground">${driver.activeStops}</p>
+                    <p class="text-[10px] text-muted-foreground">Active Stops</p>
+                  </div>
+                  <div>
+                    <p class="font-display font-bold text-foreground">${driver.completedToday}</p>
+                    <p class="text-[10px] text-muted-foreground">Completed</p>
+                  </div>
+                  <div>
+                    <p class="font-display font-bold text-primary">${driver.etaNext}</p>
+                    <p class="text-[10px] text-muted-foreground">Next ETA</p>
+                  </div>
                 </div>
 
-                <div class="space-y-2 pt-1 border-t border-border">
-                  <div class="flex items-center gap-2">
-                    <select id="status-select-${order.id}" class="flex-1 bg-secondary text-xs rounded-lg px-2.5 py-2 border border-border focus:ring-1 focus:ring-primary focus:outline-none">
-                      ${statuses
-                        .map(
-                          (s) => `
-                        <option value="${s}" ${order.rawStatus === s ? "selected" : ""}>${s}</option>
-                      `
-                        )
-                        .join("")}
-                    </select>
-                    <button
-                      onclick="advanceOrderStatus('${order.id}')"
-                      class="gradient-btn px-4 py-2 rounded-lg text-xs font-semibold"
-                    >
-                      Update
-                    </button>
-                  </div>
-                  <input
-                    id="status-notes-${order.id}"
-                    type="text"
-                    placeholder="Optional timeline note (e.g. Insole sanitized)..."
-                    class="w-full bg-secondary text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/60"
-                  />
+                <!-- Footer & Action -->
+                <div class="flex items-center justify-between pt-1 border-t border-border/50 text-xs">
+                  <span class="text-[11px] text-muted-foreground flex items-center gap-1">
+                    ${renderIcon("map-pin", "text-muted-foreground", 12)}
+                    ${driver.zone}
+                  </span>
+                  <a
+                    href="tel:${driver.phone}"
+                    class="text-xs text-primary font-medium hover:underline flex items-center gap-1"
+                  >
+                    ${renderIcon("phone", "text-primary", 12)} Call
+                  </a>
                 </div>
               </div>
             `
               )
               .join("")}
           </div>
+        </div>
 
-          <!-- Desktop Full-Width Table Layout (>=768px) -->
-          <div class="hidden md:block glass-card rounded-2xl overflow-hidden border border-border">
-            <div class="overflow-x-auto">
-              <table class="w-full text-left text-xs">
-                <thead class="bg-secondary/70 border-b border-border text-muted-foreground font-semibold uppercase tracking-wider">
-                  <tr>
-                    <th class="py-3.5 px-4">Order #</th>
-                    <th class="py-3.5 px-4">Customer</th>
-                    <th class="py-3.5 px-4">Service</th>
-                    <th class="py-3.5 px-4">Total</th>
-                    <th class="py-3.5 px-4">Scheduled</th>
-                    <th class="py-3.5 px-4">Pickup Address</th>
-                    <th class="py-3.5 px-4">Status</th>
-                    <th class="py-3.5 px-4 min-w-[240px]">Update Status</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-border/60">
-                  ${adminOrdersList
-                    .map(
-                      (order) => `
-                    <tr class="hover:bg-secondary/30 transition-colors">
-                      <td class="py-3.5 px-4 font-mono font-bold text-foreground">#${order.id}</td>
-                      <td class="py-3.5 px-4">
-                        <p class="font-medium text-foreground">${order.customerName || "Customer"}</p>
-                        <p class="text-[11px] text-muted-foreground">${order.customerEmail || ""}</p>
-                      </td>
-                      <td class="py-3.5 px-4 font-medium text-foreground">${order.service}</td>
-                      <td class="py-3.5 px-4 font-display font-bold gradient-text">${order.price}</td>
-                      <td class="py-3.5 px-4 text-muted-foreground">
-                        <p class="text-foreground font-medium">${order.date}</p>
-                        <p class="text-[10px]">${order.scheduledTime || ""}</p>
-                      </td>
-                      <td class="py-3.5 px-4 text-muted-foreground max-w-[160px] truncate" title="${order.pickupAddress}">
-                        ${order.pickupAddress}
-                      </td>
-                      <td class="py-3.5 px-4">
-                        <span class="inline-block px-2.5 py-1 rounded-full text-[11px] font-medium bg-primary/20 text-primary border border-primary/30">
-                          ${order.status}
-                        </span>
-                      </td>
-                      <td class="py-3.5 px-4">
-                        <div class="flex items-center gap-2">
-                          <select id="status-select-table-${order.id}" class="bg-secondary text-xs rounded-lg px-2.5 py-1.5 border border-border focus:ring-1 focus:ring-primary focus:outline-none">
-                            ${statuses
-                              .map(
-                                (s) => `
-                              <option value="${s}" ${order.rawStatus === s ? "selected" : ""}>${s}</option>
-                            `
-                              )
-                              .join("")}
-                          </select>
-                          <button
-                            onclick="advanceOrderStatus('${order.id}')"
-                            class="gradient-btn px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0"
-                          >
-                            Update
-                          </button>
-                        </div>
-                        <input
-                          id="status-notes-table-${order.id}"
-                          type="text"
-                          placeholder="Timeline note..."
-                          class="w-full mt-1.5 bg-secondary text-[11px] rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/60"
-                        />
-                      </td>
-                    </tr>
-                  `
-                    )
-                    .join("")}
-                </tbody>
-              </table>
+        <!-- Column 2: Customer Care & Support Tickets -->
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="font-display font-semibold text-base md:text-lg">Customer Inquiries & Support</h2>
+              <p class="text-xs text-muted-foreground">Special care requests, doorman instructions & scheduling</p>
             </div>
+            <span class="text-xs px-2.5 py-1 rounded-full bg-primary/20 text-primary font-bold">
+              ${tickets.filter((t) => t.status === "OPEN").length} Pending
+            </span>
           </div>
-        `
-        }
+
+          <div class="space-y-3">
+            ${tickets
+              .map(
+                (ticket) => `
+              <div class="glass-card rounded-2xl p-4 space-y-3 hover:border-primary/40 transition-all ${
+                ticket.status === "OPEN" ? "border-amber-500/30" : "opacity-80"
+              }">
+                <div class="flex items-start justify-between">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-mono font-bold text-xs text-foreground">#${ticket.id}</span>
+                      <span class="text-[9px] px-2 py-0.2 rounded-full font-bold uppercase tracking-wider ${
+                        ticket.priority === "HIGH"
+                          ? "bg-rose-500/20 text-rose-400"
+                          : ticket.priority === "MEDIUM"
+                          ? "bg-amber-500/20 text-amber-400"
+                          : "bg-sky-500/20 text-sky-400"
+                      }">
+                        ${ticket.priority} Priority
+                      </span>
+                    </div>
+                    <p class="text-xs font-semibold text-foreground mt-0.5">${ticket.customer} (${ticket.email})</p>
+                  </div>
+                  <span class="text-[10px] text-muted-foreground">${ticket.time}</span>
+                </div>
+
+                <!-- Inquiry Box -->
+                <div class="bg-secondary/60 p-3 rounded-xl text-xs space-y-1">
+                  <p class="text-foreground/90 leading-relaxed">${ticket.issue}</p>
+                  <p class="text-[10px] text-primary font-medium">Order Ref: #${ticket.orderId}</p>
+                </div>
+
+                <!-- Action Button -->
+                <div class="flex items-center justify-between pt-1 border-t border-border/50">
+                  <span class="text-[11px] font-medium ${ticket.status === "OPEN" ? "text-amber-400" : "text-emerald-400"} flex items-center gap-1">
+                    ${renderIcon(ticket.status === "OPEN" ? "clock" : "check-circle-2", ticket.status === "OPEN" ? "text-amber-400" : "text-emerald-400", 13)}
+                    Status: ${ticket.status}
+                  </span>
+
+                  ${
+                    ticket.status === "OPEN"
+                      ? `
+                    <button
+                      onclick="resolveSupportTicket('${ticket.id}')"
+                      class="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 text-xs font-semibold transition-all flex items-center gap-1.5"
+                    >
+                      ${renderIcon("check", "text-emerald-400", 12)}
+                      <span>Resolve Ticket</span>
+                    </button>
+                  `
+                      : `
+                    <span class="text-xs text-muted-foreground flex items-center gap-1">
+                      ${renderIcon("check", "text-emerald-400", 12)} Resolved
+                    </span>
+                  `
+                  }
+                </div>
+              </div>
+            `
+              )
+              .join("")}
+          </div>
+        </div>
+
       </div>
-      ${renderBottomNav()}
     </div>
   `;
+}
+
+function renderAdminPhotoModal() {
+  if (!state.admin.viewingPhotoOrderId) return "";
+  const order = adminOrdersList.find((o) => o.id === state.admin.viewingPhotoOrderId);
+  if (!order || !order.photoUrls || order.photoUrls.length === 0) return "";
+
+  return `
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in" onclick="closeOrderPhotosModal()">
+      <div class="glass-card max-w-lg w-full rounded-3xl p-5 space-y-4 shadow-2xl border border-primary/30 animate-slide-up" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between pb-3 border-b border-border/60">
+          <div>
+            <h3 class="font-display font-bold text-base text-foreground">Condition Inspection Photos</h3>
+            <p class="text-xs text-muted-foreground">Order #${order.id} • ${order.customerName}</p>
+          </div>
+          <button onclick="closeOrderPhotosModal()" class="p-2 rounded-full hover:bg-secondary text-muted-foreground hover:text-foreground">
+            ${renderIcon("x", "text-muted-foreground", 16)}
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto pr-1">
+          ${order.photoUrls
+            .map(
+              (url, idx) => `
+            <div class="glass-card rounded-xl overflow-hidden border border-border group relative">
+              <img src="${url}" alt="Condition Photo ${idx + 1}" class="w-full h-36 object-cover" />
+              <div class="p-2 bg-secondary/80 text-[10px] text-muted-foreground">
+                Photo #${idx + 1}
+              </div>
+            </div>
+          `
+            )
+            .join("")}
+        </div>
+
+        <button onclick="closeOrderPhotosModal()" class="w-full gradient-btn py-2.5 rounded-xl text-xs font-semibold">
+          Close Preview
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function setAdminTab(tabName) {
+  if (state.admin) {
+    state.admin.activeTab = tabName;
+  }
+  if (state.currentRoute !== "/admin") {
+    navigate("/admin");
+  } else {
+    render();
+  }
+}
+
+function setAdminSearchQuery(q) {
+  if (state.admin) {
+    state.admin.searchQuery = q;
+  }
+  render();
+}
+
+function setAdminStatusFilter(filter) {
+  if (state.admin) {
+    state.admin.statusFilter = filter;
+  }
+  render();
+}
+
+async function refreshAdminDashboard() {
+  try {
+    showToast("Synchronizing with cloud database...");
+    adminOrdersList = await API.getAdminOrders();
+    state.reviews = await API.getReviews().catch(() => state.reviews);
+    render();
+    showToast("Operations dashboard up to date.");
+  } catch (err) {
+    showToast("Failed to sync: " + err.message, "error");
+  }
+}
+
+function resolveSupportTicket(ticketId) {
+  const ticket = state.admin.supportTickets.find((t) => t.id === ticketId);
+  if (ticket) {
+    ticket.status = "RESOLVED";
+    showToast(`Support Ticket #${ticketId} resolved.`);
+    render();
+  }
+}
+
+function toggleFeaturedReview(reviewId) {
+  state.admin.featuredReviews[reviewId] = !state.admin.featuredReviews[reviewId];
+  const isFeatured = state.admin.featuredReviews[reviewId];
+  showToast(isFeatured ? "Review pinned as Featured on storefront." : "Review unpinned from storefront.");
+  render();
+}
+
+function submitAdminReviewReply(reviewId) {
+  const input = document.getElementById(`admin-reply-input-${reviewId}`);
+  if (!input) return;
+  const reply = input.value.trim();
+  if (!reply) {
+    showToast("Please enter an official response.", "error");
+    return;
+  }
+  state.admin.adminReplies[reviewId] = reply;
+  showToast("Official staff response published.");
+  render();
+}
+
+function openOrderPhotosModal(orderId) {
+  state.admin.viewingPhotoOrderId = orderId;
+  render();
+}
+
+function closeOrderPhotosModal() {
+  state.admin.viewingPhotoOrderId = null;
+  render();
 }
 
 async function advanceOrderStatus(trackingNumber) {
@@ -3113,7 +4107,11 @@ async function handleAuthSubmit(e) {
       showToast("Account created successfully! Welcome to Sneaker Spa.");
     }
     closeAuthModal();
-    navigate("/home");
+    if (state.currentUser && state.currentUser.role === "ADMIN") {
+      navigate("/admin");
+    } else {
+      navigate("/home");
+    }
   } catch (err) {
     showToast(err.message, "error");
   }
@@ -3124,7 +4122,7 @@ async function quickLogin(email, password) {
     await API.login(email, password);
     showToast(`Signed in as ${email}!`);
     closeAuthModal();
-    if (email.includes("admin")) {
+    if (email.includes("admin") || (state.currentUser && state.currentUser.role === "ADMIN")) {
       navigate("/admin");
     } else {
       navigate("/home");
@@ -3157,12 +4155,13 @@ async function render() {
   } else if (route === "/profile") {
     app.innerHTML = renderProfile();
   } else if (route === "/admin") {
-    const user = state.currentUser;
+    const user = API.getUser() || state.currentUser;
     if (!user || user.role !== "ADMIN") {
       showToast("Access denied: Admin privileges required.", "error");
       setTimeout(() => navigate("/home"), 50);
       return;
     }
+    state.currentUser = user;
     app.innerHTML = await renderAdmin();
   } else {
     app.innerHTML = renderNotFound();
@@ -3222,6 +4221,15 @@ window.closeAuthModal = closeAuthModal;
 window.handleAuthSubmit = handleAuthSubmit;
 window.quickLogin = quickLogin;
 window.advanceOrderStatus = advanceOrderStatus;
+window.setAdminTab = setAdminTab;
+window.setAdminSearchQuery = setAdminSearchQuery;
+window.setAdminStatusFilter = setAdminStatusFilter;
+window.refreshAdminDashboard = refreshAdminDashboard;
+window.resolveSupportTicket = resolveSupportTicket;
+window.toggleFeaturedReview = toggleFeaturedReview;
+window.submitAdminReviewReply = submitAdminReviewReply;
+window.openOrderPhotosModal = openOrderPhotosModal;
+window.closeOrderPhotosModal = closeOrderPhotosModal;
 
 // Start app immediately or on DOMContentLoaded
 async function startApp() {

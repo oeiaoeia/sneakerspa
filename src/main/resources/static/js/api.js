@@ -95,8 +95,12 @@ const API = {
       body: JSON.stringify({ email, password }),
     });
     this.setToken(res.token);
-    this.setUser({ id: res.id, name: res.name, email: res.email, role: res.role });
-    window.dispatchEvent(new CustomEvent("auth-changed", { detail: { authenticated: true, user: this.getUser() } }));
+    const u = { id: res.id, name: res.name, email: res.email, role: res.role };
+    this.setUser(u);
+    if (typeof state !== "undefined" && state) {
+      state.currentUser = u;
+    }
+    window.dispatchEvent(new CustomEvent("auth-changed", { detail: { authenticated: true, user: u } }));
     return res;
   },
 
@@ -106,8 +110,12 @@ const API = {
       body: JSON.stringify({ name, email, password }),
     });
     this.setToken(res.token);
-    this.setUser({ id: res.id, name: res.name, email: res.email, role: res.role });
-    window.dispatchEvent(new CustomEvent("auth-changed", { detail: { authenticated: true, user: this.getUser() } }));
+    const u = { id: res.id, name: res.name, email: res.email, role: res.role };
+    this.setUser(u);
+    if (typeof state !== "undefined" && state) {
+      state.currentUser = u;
+    }
+    window.dispatchEvent(new CustomEvent("auth-changed", { detail: { authenticated: true, user: u } }));
     return res;
   },
 
