@@ -1242,11 +1242,11 @@ function bookServiceNow(serviceId) {
 
 // ============================================================================
 // SCREEN 4: BOOKING (#/booking)
-// 5-Step Flow: Service -> Schedule -> Address -> Photos -> Payment
+// 4-Step Flow: Service -> Schedule -> Address -> Payment
 // MULTI-SERVICE SELECTION DELIBERATE REQUIREMENT SUPPORTED!
 // ============================================================================
 
-const bookingSteps = ["Service", "Schedule", "Address", "Photos", "Payment"];
+const bookingSteps = ["Service", "Schedule", "Address", "Payment"];
 const bookingTimeSlots = ["9:00 AM", "10:00 AM", "11:00 AM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"];
 
 function renderBooking() {
@@ -1307,7 +1307,6 @@ function renderBooking() {
             ${currentStep === 1 ? renderBookingStep1(dates) : ""}
             ${currentStep === 2 ? renderBookingStep2() : ""}
             ${currentStep === 3 ? renderBookingStep3() : ""}
-            ${currentStep === 4 ? renderBookingStep4() : ""}
 
             <!-- Desktop In-Column Continue / Back Button (Visible on lg+) -->
             <div class="hidden lg:flex items-center gap-4 pt-6 border-t border-border/60">
@@ -1682,70 +1681,8 @@ function renderBookingStep2() {
   `;
 }
 
-// Step 3: Photos (4 slots with real file upload support)
+// Step 3: Payment Summary (CLEAN20 promo, calculation breakdown)
 function renderBookingStep3() {
-  const b = state.booking;
-  const slots = [
-    { n: 1, label: "Front" },
-    { n: 2, label: "Back" },
-    { n: 3, label: "Sole" },
-    { n: 4, label: "Side" },
-  ];
-
-  return `
-    <div class="space-y-4 animate-fade-in">
-      <h2 class="font-display font-semibold text-base mb-2">Upload Sneaker Photos</h2>
-      <div class="flex items-start gap-2 glass-card rounded-xl p-3">
-        ${renderIcon("info", "text-primary shrink-0 mt-0.5", 14)}
-        <p class="text-xs text-muted-foreground">Photos help us assess condition and provide accurate pricing. At least 2 photos recommended.</p>
-      </div>
-
-      <div class="grid grid-cols-2 gap-3 mt-2">
-        ${slots
-          .map(({ n, label }) => {
-            const uploaded = b.uploadedPhotos.find((p) => p.slotNumber === n);
-            return `
-            <div
-              onclick="triggerPhotoUpload(${n}, '${label}')"
-              class="aspect-square glass-card rounded-2xl flex flex-col items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 relative overflow-hidden ${
-                uploaded ? "border-primary/50 bg-primary/5" : "hover:border-primary/30"
-              }"
-            >
-              ${
-                uploaded
-                  ? `
-                <img src="${uploaded.photoUrl}" alt="${label}" class="absolute inset-0 w-full h-full object-cover opacity-60" />
-                <div class="relative z-10 w-10 h-10 rounded-full bg-primary/20 backdrop-blur-sm flex items-center justify-center">
-                  ${renderIcon("check", "text-primary", 20)}
-                </div>
-                <span class="relative z-10 text-[10px] text-primary font-medium">${label} ✓</span>
-              `
-                  : `
-                ${renderIcon("camera", "text-muted-foreground", 24)}
-                <span class="text-[10px] text-muted-foreground">${label}</span>
-              `
-              }
-            </div>
-          `;
-          })
-          .join("")}
-      </div>
-
-      <input type="file" id="booking-photo-input" accept="image/*" class="hidden" onchange="handlePhotoFileSelected(event)" />
-
-      <p class="text-[10px] text-muted-foreground text-center">${b.uploadedPhotos.length}/4 photos uploaded</p>
-      <button
-        onclick="document.getElementById('booking-photo-input').click()"
-        class="w-full glass-card rounded-xl py-3 text-sm font-medium flex items-center justify-center gap-2 text-primary mt-2 hover:bg-primary/10 active:scale-[0.97] transition-all"
-      >
-        ${renderIcon("upload", "text-primary", 16)} Upload from Gallery
-      </button>
-    </div>
-  `;
-}
-
-// Step 4: Payment Summary (CLEAN20 promo, calculation breakdown)
-function renderBookingStep4() {
   const b = state.booking;
   const selectedServices = state.services.filter((s) => b.selectedServiceIds.includes(s.id));
   const selectedAddons = state.addOns.filter((a) => b.selectedAddonIds.includes(a.id));
@@ -2068,26 +2005,11 @@ async function handleBookingNext() {
         address: state.booking.address,
         specialInstructions: state.booking.instructions,
         promoCode: state.booking.promoApplied ? state.booking.promoCode : null,
-        photos: state.booking.uploadedPhotos,
+        photos: [],
       };
 
       const placed = await API.createOrder(orderData);
-
-      // Upload photos as BLOBs to database for this newly created order
-      if (state.booking.uploadedPhotos && state.booking.uploadedPhotos.length > 0) {
-        showToast("Saving sneaker photos to database...");
-        for (const p of state.booking.uploadedPhotos) {
-          if (p.file) {
-            try {
-              await API.uploadOrderPhoto(placed.id, p.slotLabel.toLowerCase(), p.file);
-            } catch (photoErr) {
-              console.error("Photo upload failed:", photoErr);
-            }
-          }
-        }
-      }
-
-      showToast("Order placed successfully with photos! 🎉");
+      showToast("Order placed successfully! 🎉");
 
       // Reset booking state
       state.booking.selectedServiceIds = [];
@@ -2275,35 +2197,11 @@ function renderActiveOrdersTab(order) {
                   <p class="text-xs font-bold truncate">${order.pickupAddress || "123 Main"}</p>
                 </div>
                 <div class="bg-secondary rounded-xl p-3 text-center">
-                  ${renderIcon("image", "text-muted-foreground mx-auto mb-1", 14)}
-                  <p class="text-[10px] text-muted-foreground">Photos</p>
-                  <p class="text-xs font-bold">${order.photosCount || 3} uploaded</p>
+                  ${renderIcon("sparkles", "text-primary mx-auto mb-1", 14)}
+                  <p class="text-[10px] text-muted-foreground">Quality</p>
+                  <p class="text-xs font-bold text-primary">Inspected</p>
                 </div>
               </div>
-
-              ${
-                order.photoUrls && order.photoUrls.length > 0
-                  ? `
-              <!-- Uploaded Condition Photos (Served from Database BLOB) -->
-              <div class="space-y-1.5">
-                <p class="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
-                  ${renderIcon("camera", "text-primary", 12)} Condition Photos (${order.photoUrls.length})
-                </p>
-                <div class="flex gap-2 overflow-x-auto pb-1">
-                  ${order.photoUrls
-                    .map(
-                      (url) => `
-                    <a href="${url}" target="_blank" class="shrink-0 w-16 h-16 rounded-xl overflow-hidden glass-card border border-primary/20 hover:border-primary transition-all">
-                      <img src="${url}" alt="Condition Photo" class="w-full h-full object-cover" />
-                    </a>
-                  `
-                    )
-                    .join("")}
-                </div>
-              </div>
-              `
-                  : ""
-              }
 
               <!-- Contact Driver -->
               <div class="flex gap-2">
@@ -3325,7 +3223,7 @@ function renderAdminOrdersTab() {
                 </span>
               </div>
 
-              <!-- Details & Photos -->
+              <!-- Details -->
               <div class="text-xs text-muted-foreground bg-secondary/50 p-2.5 rounded-xl space-y-1.5">
                 <p class="flex items-center gap-1.5">
                   ${renderIcon("map-pin", "text-primary shrink-0", 13)}
@@ -3335,23 +3233,6 @@ function renderAdminOrdersTab() {
                   <span>Total: <strong class="text-foreground">${order.price}</strong></span>
                   <span>${order.date} • ${order.scheduledTime || ""}</span>
                 </div>
-                ${
-                  order.photoUrls && order.photoUrls.length > 0
-                    ? `
-                  <div class="pt-1.5 border-t border-border/40 flex items-center justify-between">
-                    <span class="text-[11px] text-primary flex items-center gap-1 font-medium">
-                      ${renderIcon("camera", "text-primary", 12)} ${order.photoUrls.length} Condition Photo(s)
-                    </span>
-                    <button
-                      onclick="openOrderPhotosModal('${order.id}')"
-                      class="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-md font-semibold hover:bg-primary/30"
-                    >
-                      View Photos
-                    </button>
-                  </div>
-                `
-                    : ""
-                }
               </div>
 
               <!-- Status Update Controls -->
@@ -3394,7 +3275,7 @@ function renderAdminOrdersTab() {
                 <tr>
                   <th class="py-3.5 px-4">Order #</th>
                   <th class="py-3.5 px-4">Customer</th>
-                  <th class="py-3.5 px-4">Service & Photos</th>
+                  <th class="py-3.5 px-4">Service</th>
                   <th class="py-3.5 px-4">Total</th>
                   <th class="py-3.5 px-4">Scheduled</th>
                   <th class="py-3.5 px-4">Pickup Address</th>
@@ -3414,20 +3295,8 @@ function renderAdminOrdersTab() {
                       <p class="font-medium text-foreground">${order.customerName || "Customer"}</p>
                       <p class="text-[11px] text-muted-foreground">${order.customerEmail || ""}</p>
                     </td>
-                    <td class="py-3.5 px-4">
-                      <p class="font-medium text-foreground">${order.service}</p>
-                      ${
-                        order.photoUrls && order.photoUrls.length > 0
-                          ? `
-                        <button
-                          onclick="openOrderPhotosModal('${order.id}')"
-                          class="mt-1 inline-flex items-center gap-1 text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded font-medium hover:bg-primary/30 transition-colors"
-                        >
-                          ${renderIcon("camera", "text-primary", 11)} ${order.photoUrls.length} Photos
-                        </button>
-                      `
-                          : ""
-                      }
+                    <td class="py-3.5 px-4 font-medium text-foreground">
+                      ${order.service}
                     </td>
                     <td class="py-3.5 px-4 font-display font-bold gradient-text">${order.price}</td>
                     <td class="py-3.5 px-4 text-muted-foreground">
